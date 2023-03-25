@@ -107,9 +107,14 @@ class DataScanListener(Node):
         )
         self.subscription  # prevent unused variable warning
 
+        
+
     def listener_callback(self, msg):
         ranges = np.array(msg.ranges)
         angles = np.linspace(msg.angle_min, msg.angle_max, len(ranges))
+        
+        print(ranges)
+        print(angles)
 
         polar_data = np.column_stack((ranges, angles))
         cartesian_data = polar_to_cartesian(polar_data)
@@ -300,6 +305,8 @@ class TAMUBot(Node):
 def main(args=None):
     rclpy.init(args=args)
     data_listener = DataScanListener()
+    
+    #Play the bag using a launch file, then run the subscriber node
     bag_path = './bags/example1'
     storage_options = StorageOptions(uri=bag_path)
     play_options = PlayOptions()
@@ -307,7 +314,6 @@ def main(args=None):
 
     player = Player()
     player.play(storage_options, play_options)
-
     rclpy.spin(data_listener)
     rclpy.shutdown()
 
