@@ -6,6 +6,9 @@ import rclpy.node
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rosbag2_py import Player, StorageOptions, PlayOptions
+from std_msgs.msg import String
+from std_msgs.msg import Float32MultiArray
+
 
 from geometry_msgs.msg import Twist
 from turtlesim.msg import Pose
@@ -111,18 +114,24 @@ class DataScanListener(Node):
             10
         )
         self.subscription  # prevent unused variable warning
+        
+        self.publisher = self.create_publisher(String, 'CartesianData', 10)  # Publish
 
         
-
     def listener_callback(self, msg):
         ranges = np.array(msg.ranges)
-        angles = np.linspace(msg.angle_min, msg.angle_max, len(ranges))
+        angles = np.linspace(msg.angle_min, msg.angle_max, len(ranges))  
         
         print(ranges)
         print(angles)
 
         polar_data = np.column_stack((ranges, angles))
         cartesian_data = polar_to_cartesian(polar_data)
+        
+        
+        msg = String()
+        msg.data = 'Hello World!'
+        self.publisher.publish(msg)
 
         
 
@@ -185,6 +194,7 @@ def main(args=None):
     rclpy.init(args=args)
     data_listener = DataScanListener()
     
+    print("Hello world")
     rclpy.spin(data_listener)
     rclpy.shutdown()
 

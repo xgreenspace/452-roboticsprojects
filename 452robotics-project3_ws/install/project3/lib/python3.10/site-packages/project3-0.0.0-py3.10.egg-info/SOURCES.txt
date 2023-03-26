@@ -8,6 +8,7 @@ setup.py
 ../../build/project3/project3.egg-info/requires.txt
 ../../build/project3/project3.egg-info/top_level.txt
 ../../build/project3/project3.egg-info/zip-safe
+launch/launch.py
 project3/__init__.py
 project3/peopleCounter.py
 project3/playBag.py
