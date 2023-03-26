@@ -71,29 +71,34 @@ def estimate_and_match_clusters(clusters, cluster_params, human_candidates):
     return matched_clusters
 
 class HumanCandidate():
-    def __init__(self, id, initial_position):
+    def __init__(self, id, initial_position):  # ADD PARAMETER FOR TIMESTEP dt WHEN CONSTRUCTING
         self.id = id
         self.kf = KalmanFilter(dim_x=4, dim_z=2)
 
         # Initialize the Kalman filter state and covariance matrices
-        self.kf.x = np.array([initial_position[0], initial_position[1], 0, 0])
+        self.kf.x = np.array([initial_position[0], initial_position[1], 0, 0])  # state=[x, y, dx/dt, dy/dt] : [<centroid>, <velocities>]
         self.kf.P *= 1e3
         self.kf.R *= 10
 
-        #Define the Kalman filter state transition and observation matrices
-        #state transistion
-        self.kf.F = np.array([[1,0,1,0],
-                              [0,1,0,1],
-                              [0,0,1,0],
-                              [0,0,0,1]])
-        #observation transition
-        self.kf.H = np.array([[1,0,0,0],
-                              [0,1,0,0]])
+        # Define the Kalman filter state transition and observation matrices
+        self.dt = 1  #! CHANGE LATER
+        self.kf.F = np.array([[1, 0, self.dt, 0],  # x' = 1*x + dt*vx
+                              [0, 1, 0, self.dt],  # y' = 1*y + dt*vy
+                              [0, 0, 1, 0],   # Doesn't matter because self.update will overwrite it
+                              [0, 0, 0, 1]])  # Doesn't matter because self.update will overwrite it
+
+        self.kf.H = np.array([[1, 0, 0, 0],
+                              [0, 1, 0, 0]])
+        
+
     def predict(self):
         self.kf.predict()
-        
+
     def update(self, measurement):
-        self.kf.update(measurement)
+        # Derive velocities from observations
+        vel = (measurement - self.kf.H @ self.kf.x) / self.dt
+        self.kf.x[2:4] = vel  # self.kf.x = [x, y, vx, vy] -> [x, y, vx', vy']  dynamically changes the current state's velocities to estimate the next state's velocities
+        self.kf.update(measurement)  # self.kf.x' = add_estimated_velocities(self.)f.x
         
 #node that subscribes to scan
 class DataScanListener(Node):
@@ -106,6 +111,8 @@ class DataScanListener(Node):
             10
         )
         self.subscription  # prevent unused variable warning
+        
+        self.publisher_ = self.create_publisher(String, 'my_topic', 10)
 
         
 
@@ -118,6 +125,11 @@ class DataScanListener(Node):
 
         polar_data = np.column_stack((ranges, angles))
         cartesian_data = polar_to_cartesian(polar_data)
+        
+        
+        msg = String()
+        msg.data = 'Hello World!'
+        self.publisher_.publish(msg)
 
         
 
@@ -175,148 +187,141 @@ class PeopleCounter(Node):
 
         cluster_parameters.append((size, circumference, straightness))
 
-class TAMUBot(Node):
-
-    def __init__(self):
-        super().__init__('tamuturtle')
-        
-        self.req = SetParameters.Request()
-        self.req.parameters = [
-            Parameter(name='background_r', value=ParameterValue(integer_value=80, type=ParameterType.PARAMETER_INTEGER)),
-            Parameter(name='background_g', value=ParameterValue(integer_value=0, type=ParameterType.PARAMETER_INTEGER)),
-            Parameter(name='background_b', value=ParameterValue(integer_value=0, type=ParameterType.PARAMETER_INTEGER))
-        ]
-# im testing now
-        self.SetBackground = self.create_client(SetParameters, 'turtlesim/set_parameters')
-        self.SetBackground.call_async(self.req)
-        
-        self.publisher_cmdvel = self.create_publisher(Twist, '/turtle1/cmd_vel', 10)
-
-        self.subscriber_pose = self.create_subscription(Pose, '/turtle1/pose', self.callback, 10)
-
-        timer_period = 0.5
-        self.timer = self.create_timer(timer_period, self.move2goal)
-
-        self.pose = Pose()
-        self.flag = False
-
-        self.points = read_points("points.txt")
-        self.steps = 0 # Current point
-        
-        self.goal_pose= Pose()
-        goal = rescale(*self.points[0])
-        
-        self.goal_pose.x, self.goal_pose.y = goal # first point on letter
-        self.goal_pose.theta = self.steering_angle(self.goal_pose) # angle to letter
-
-        self.pen = self.create_client(SetPen, 'turtle1/set_pen')
-
-        self.set_pen(False)
-
-    def set_pen(self, state):
-        msg = SetPen.Request()
-        msg.r = 255
-        msg.g = 255
-        msg.b = 255
-        msg.width = 1
-        msg.off = not state
-        self.pen.call_async(msg)
-    
-
-    def callback(self, data):
-        self.pose.x = data.x
-        self.pose.y = data.y
-        self.pose.theta = data.theta
-        msg = 'X: {:.3f}, Y: {:.3f}, Theta: {:.3f}'.format(data.x, data.y, data.theta)
-        self.get_logger().info(msg)
-
-        
-    # returns distance between points, and angle to the horizontal of the source
-    def euclidean(self, goal_pose):
-        return math.hypot(*trans((self.pose.x, self.pose.y), (goal_pose.x, goal_pose.y)))
-    
-
-    def steering_angle(self, goal_pose):
-        vector = trans((self.pose.x, self.pose.y), (goal_pose.x, goal_pose.y))
-        return angle(vector)
-
-    def linear_vel(self, goal_pose):
-        return 2 * self.euclidean(goal_pose)
-
-    def angular_vel(self, goal_pose):
-        return 2 * (self.steering_angle(goal_pose)-self.pose.theta)
-
-
-    def move2goal(self):
-
-        distance_tolerance = 0.01
-        angular_tolerance = 0.01
-
-        goal_pose = self.goal_pose
-
-        vel_msg = Twist()
-
-        if abs(self.steering_angle(goal_pose)-self.pose.theta) > angular_tolerance:
-            vel_msg.linear.x = 0.0
-            vel_msg.angular.z = self.angular_vel(goal_pose)
-        else:
-            vel_msg.angular.z = 0.0
-            if self.euclidean(goal_pose)>=distance_tolerance:
-                vel_msg.linear.x = self.linear_vel(goal_pose)
-            else:
-                vel_msg.linear.x = 0.0
-                self.flag = True
-        
-        if self.flag:
-             # put that in here
-            self.steps += 1
-            
-            if self.steps >= len(self.points):
-                self.steps = len(self.points) - 1
-                quit()
-            
-            goal = self.points[self.steps]
-            
-            if goal == "STOP DRAWING":
-                #turn off pen
-                self.set_pen(False)
-                self.steps += 1
-                goal = self.points[self.steps]
-                
-            if goal == "START DRAWING": # this string is 13 characters long
-                #turn on pen
-                self.set_pen(True)
-                self.steps += 1
-                goal = self.points[self.steps]
-            
-            goal = rescale(*goal)  # a string is being passed into it
-
-
-            self.goal_pose= Pose()
-            self.goal_pose.x, self.goal_pose.y = goal # next point
-            self.goal_pose.theta = self.steering_angle(self.goal_pose)  # should be angle from current point to next point
-            self.flag = False
-           
-        
-        self.publisher_cmdvel.publish(vel_msg)
-        
-
 
 def main(args=None):
     rclpy.init(args=args)
     data_listener = DataScanListener()
     
-    #Play the bag using a launch file, then run the subscriber node
-    bag_path = './bags/example1'
-    storage_options = StorageOptions(uri=bag_path)
-    play_options = PlayOptions()
-    play_options.loop = True
-
-    player = Player()
-    player.play(storage_options, play_options)
     rclpy.spin(data_listener)
     rclpy.shutdown()
 
 
 if __name__ == '__main__':
     main()
+
+# class TAMUBot(Node):
+
+#     def __init__(self):
+#         super().__init__('tamuturtle')
+        
+#         self.req = SetParameters.Request()
+#         self.req.parameters = [
+#             Parameter(name='background_r', value=ParameterValue(integer_value=80, type=ParameterType.PARAMETER_INTEGER)),
+#             Parameter(name='background_g', value=ParameterValue(integer_value=0, type=ParameterType.PARAMETER_INTEGER)),
+#             Parameter(name='background_b', value=ParameterValue(integer_value=0, type=ParameterType.PARAMETER_INTEGER))
+#         ]
+# # im testing now
+#         self.SetBackground = self.create_client(SetParameters, 'turtlesim/set_parameters')
+#         self.SetBackground.call_async(self.req)
+        
+#         self.publisher_cmdvel = self.create_publisher(Twist, '/turtle1/cmd_vel', 10)
+
+#         self.subscriber_pose = self.create_subscription(Pose, '/turtle1/pose', self.callback, 10)
+
+#         timer_period = 0.5
+#         self.timer = self.create_timer(timer_period, self.move2goal)
+
+#         self.pose = Pose()
+#         self.flag = False
+
+#         self.points = read_points("points.txt")
+#         self.steps = 0 # Current point
+        
+#         self.goal_pose= Pose()
+#         goal = rescale(*self.points[0])
+        
+#         self.goal_pose.x, self.goal_pose.y = goal # first point on letter
+#         self.goal_pose.theta = self.steering_angle(self.goal_pose) # angle to letter
+
+#         self.pen = self.create_client(SetPen, 'turtle1/set_pen')
+
+#         self.set_pen(False)
+
+#     def set_pen(self, state):
+#         msg = SetPen.Request()
+#         msg.r = 255
+#         msg.g = 255
+#         msg.b = 255
+#         msg.width = 1
+#         msg.off = not state
+#         self.pen.call_async(msg)
+    
+
+#     def callback(self, data):
+#         self.pose.x = data.x
+#         self.pose.y = data.y
+#         self.pose.theta = data.theta
+#         msg = 'X: {:.3f}, Y: {:.3f}, Theta: {:.3f}'.format(data.x, data.y, data.theta)
+#         self.get_logger().info(msg)
+
+        
+#     # returns distance between points, and angle to the horizontal of the source
+#     def euclidean(self, goal_pose):
+#         return math.hypot(*trans((self.pose.x, self.pose.y), (goal_pose.x, goal_pose.y)))
+    
+
+#     def steering_angle(self, goal_pose):
+#         vector = trans((self.pose.x, self.pose.y), (goal_pose.x, goal_pose.y))
+#         return angle(vector)
+
+#     def linear_vel(self, goal_pose):
+#         return 2 * self.euclidean(goal_pose)
+
+#     def angular_vel(self, goal_pose):
+#         return 2 * (self.steering_angle(goal_pose)-self.pose.theta)
+
+
+#     def move2goal(self):
+
+#         distance_tolerance = 0.01
+#         angular_tolerance = 0.01
+
+#         goal_pose = self.goal_pose
+
+#         vel_msg = Twist()
+
+#         if abs(self.steering_angle(goal_pose)-self.pose.theta) > angular_tolerance:
+#             vel_msg.linear.x = 0.0
+#             vel_msg.angular.z = self.angular_vel(goal_pose)
+#         else:
+#             vel_msg.angular.z = 0.0
+#             if self.euclidean(goal_pose)>=distance_tolerance:
+#                 vel_msg.linear.x = self.linear_vel(goal_pose)
+#             else:
+#                 vel_msg.linear.x = 0.0
+#                 self.flag = True
+        
+#         if self.flag:
+#              # put that in here
+#             self.steps += 1
+            
+#             if self.steps >= len(self.points):
+#                 self.steps = len(self.points) - 1
+#                 quit()
+            
+#             goal = self.points[self.steps]
+            
+#             if goal == "STOP DRAWING":
+#                 #turn off pen
+#                 self.set_pen(False)
+#                 self.steps += 1
+#                 goal = self.points[self.steps]
+                
+#             if goal == "START DRAWING": # this string is 13 characters long
+#                 #turn on pen
+#                 self.set_pen(True)
+#                 self.steps += 1
+#                 goal = self.points[self.steps]
+            
+#             goal = rescale(*goal)  # a string is being passed into it
+
+
+#             self.goal_pose= Pose()
+#             self.goal_pose.x, self.goal_pose.y = goal # next point
+#             self.goal_pose.theta = self.steering_angle(self.goal_pose)  # should be angle from current point to next point
+#             self.flag = False
+           
+        
+#         self.publisher_cmdvel.publish(vel_msg)
+        
+
