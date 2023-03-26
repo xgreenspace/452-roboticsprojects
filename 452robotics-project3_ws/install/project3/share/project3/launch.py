@@ -1,14 +1,16 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, TimerAction
-from launch.substitutions import LaunchConfiguration
+from launch.actions import *
+from launch.substitutions import *
 from launch_ros.actions import *
+from launch.event_handlers import *
+from launch.events import *
+
 
 def generate_launch_description():
     # playBag = Node(package='project3',
     #             executable='playBag')
     peopleCounter = Node(package='project3',
                 executable='peopleCounter')
-    
     
     # declares new argument
     bagIn = DeclareLaunchArgument('bagIn', default_value = 'example1') #command line is: ros2 launch project3 launch.py bagIn:=example1
@@ -22,5 +24,10 @@ def generate_launch_description():
     
     ep = ExecuteProcess(cmd=['ros2', 'bag', 'play', bagPathName])
     
-    ld = LaunchDescription([bagIn, bagPath, ep, peopleCounter])
+    event_handler = OnProcessExit(target_action=ep,
+                              on_exit=[EmitEvent(event=Shutdown())])
+    
+    terminate_at_end = RegisterEventHandler(event_handler)
+    
+    ld = LaunchDescription([bagIn, bagPath, terminate_at_end, ep, peopleCounter])
     return ld
