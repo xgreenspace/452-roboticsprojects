@@ -33,7 +33,7 @@ def polar_to_cartesian(polar_data):
     # polar_data: A 2D NumPy array with columns [distance, angle (in radians)]
     x = polar_data[:, 0] * np.cos(polar_data[:, 1])
     y = polar_data[:, 0] * np.sin(polar_data[:, 1])
-    return np.column_stack((x, y))
+    return x, y  # np.column_stack((x, y))
 
 def find_nearest_neighbors(pts1, pts2):
     nn = NearestNeighbors(n_neighbors=1)
@@ -126,11 +126,14 @@ class DataScanListener(Node):
         print(angles)
 
         polar_data = np.column_stack((ranges, angles))
-        cartesian_data = polar_to_cartesian(polar_data)
+        xlist, ylist = polar_to_cartesian(polar_data)
+        CartesianCoords:
+        float32[] - x list
+        float32[] - y list
         
-        
-        msg = String()
-        msg.data = 'Hello World!'
+        msg = CartesianCoords()
+        msg.x = xlist
+        msg.y = ylist
         self.publisher.publish(msg)
 
         
