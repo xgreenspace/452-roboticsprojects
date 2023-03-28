@@ -21,9 +21,9 @@ def generate_launch_description():
     
     bagPathName = LaunchConfiguration('bagPath')
     
-    
     ep = ExecuteProcess(cmd=['ros2', 'bag', 'play', bagPathName])
     
+    #automatically terminate everything once the bag play finishes
     event_handler = OnProcessExit(target_action=ep,
                               on_exit=[EmitEvent(event=Shutdown())])
     

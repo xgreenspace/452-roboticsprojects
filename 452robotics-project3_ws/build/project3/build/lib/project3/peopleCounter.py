@@ -5,9 +5,10 @@ import math
 import rclpy.node
 from rclpy.node import Node
 from rclpy.parameter import Parameter
+from rclpy.executors import SingleThreadedExecutor
 from rosbag2_py import Player, StorageOptions, PlayOptions
-from std_msgs.msg import String
-from std_msgs.msg import Float32MultiArray
+from std_msgs.msg import String, Int64
+from std_msgs.msg import MultiArrayDimension, MultiArrayLayout, Float32MultiArray
 
 
 from geometry_msgs.msg import Twist
@@ -27,6 +28,67 @@ from sklearn.cluster import DBSCAN
 import os
 import sys
 
+# This is a simple test function to detect the number of people using DBSCAN
+def detect_humans(points):
+    # Apply the DBSCAN clustering algorithm
+    clustering = DBSCAN(eps=0.5, min_samples=3).fit(points)
+
+    # Filter the clusters to find those that represent humans
+    human_count = 0
+    for label in set(clustering.labels_):
+        if label == -1:
+            continue  # Ignore noise
+
+        cluster_points = points[clustering.labels_ == label]
+        cluster_size = cluster_points.ptp(axis=0)  # Get the size of the bounding box for the cluster
+
+        # Set constraints for the size of a human-like cluster
+        min_width, max_width = 0, 2
+        min_height, max_height = 0, 2
+
+        if min_width < cluster_size[0] < max_width and min_height < cluster_size[1] < max_height:
+            human_count += 1
+            # Compute centroid
+            # Write human_count to a file
+    with open('human_count.txt', 'a') as f:
+            f.write(str(human_count) + "\n")    
+            
+    return human_count
+
+
+def generate_clusters(data, distance_threshold=0.5, min_points=3):
+    """
+    Generate clusters from the input LiDAR data.
+
+    :param data: A numpy array of shape (n, 2) representing the input LiDAR data in Cartesian coordinates.
+    :param distance_threshold: The distance threshold used to group neighboring points into clusters.
+    :param min_points: The minimum number of points a cluster should have.
+    :return: A list of clusters, where each cluster is a numpy array of shape (m, 2), m being the number of points in the cluster.
+    """
+    clusters = []
+    visited = np.zeros(data.shape[0], dtype=bool)
+
+    for i, point in enumerate(data):
+        if visited[i]:
+            continue
+
+        # Find neighboring points
+        distances = np.linalg.norm(data - point, axis=1)
+        neighbors = np.where(distances <= distance_threshold)[0]
+
+        if len(neighbors) >= min_points:
+            cluster_points = data[neighbors]
+            clusters.append(cluster_points)
+            visited[neighbors] = True
+    
+
+    
+    for cluster in clusters:
+        plt.scatter(cluster[:, 0], cluster[:, 1])
+    plt.savefig('clusters.png')
+
+    return clusters
+
 
 #convert distance vectors (polar coordinates) to points in 2D (cartesian coordinates)
 def polar_to_cartesian(polar_data):
@@ -41,20 +103,7 @@ def find_nearest_neighbors(pts1, pts2):
     distances, indices = nn.kneighbors(pts1)
     return distances.ravel(), indices.ravel()
 
-# Detect humans and estimate and match clusters will be called in the callback function of the scan subscriber
-def detect_humans(matched_clusters, cluster_params, human_candidates):
-    detected_humans = []
-    
-    for cluster_idx in matched_clusters:
-        cluster = cluster_params[cluster_idx]
-        size, circumference, straightness = cluster
-
-        if size > 0.2 and circumference > 0.6 and straightness > 0.8: # PLACEHOLDER CONDITION
-            detected_humans.append(human_candidates[cluster_idx])
-            
-    return detected_humans
-
-def estimate_and_match_clusters(clusters, cluster_params, human_candidates):
+def estimate_and_match_clusters(clusters, human_candidates):
     matched_clusters = []
     
     # update human candidates' Kalman filter 
@@ -62,7 +111,7 @@ def estimate_and_match_clusters(clusters, cluster_params, human_candidates):
         hc.predict()
     
     # estimate the positions of human candidates
-    estimated_positions = [hc.kf.x[:2] for hc in human_candidates]
+    estimated_positions = [hc.kf.x[:2] for hc in human_candidates]  # hc.kf.x[:2] = (x, y) = centroid of human
     
     # match the clusters to the human candidates based on the distance
     cluster_distances, matched_indices = find_nearest_neighbors(estimated_positions, clusters)
@@ -72,6 +121,21 @@ def estimate_and_match_clusters(clusters, cluster_params, human_candidates):
             matched_clusters.append(cluster_idx)
             
     return matched_clusters
+
+# # detect_humans and estimate_and_match_clusters will be called in the callback function of the scan subscriber
+# def detect_humans(matched_clusters, cluster_params, human_candidates):
+#     detected_humans = []
+    
+#     for cluster_idx in matched_clusters:
+#         cluster = cluster_params[cluster_idx]
+#         size, circumference, straightness = cluster
+
+#         if size > 0.2 and circumference > 0.6 and straightness > 0.8: # PLACEHOLDER CONDITION
+#             detected_humans.append(human_candidates[cluster_idx])
+            
+#     return detected_humans
+
+
 
 class HumanCandidate():
     def __init__(self, id, initial_position):  # ADD PARAMETER FOR TIMESTEP dt WHEN CONSTRUCTING
@@ -115,10 +179,11 @@ class DataScanListener(Node):
         )
         self.subscription  # prevent unused variable warning
         
-        self.publisher = self.create_publisher(String, 'CartesianData', 10)  # Publish
+        self.publisher = self.create_publisher(Float32MultiArray, 'CartesianData', 10)  # Publish
 
         
     def listener_callback(self, msg):
+        self.get_logger().info('LaserScan message received') # Check if message have been received
         ranges = np.array(msg.ranges)
         angles = np.linspace(msg.angle_min, msg.angle_max, len(ranges))  
         
@@ -126,12 +191,34 @@ class DataScanListener(Node):
         print(angles)
 
         polar_data = np.column_stack((ranges, angles))
-        cartesian_data = polar_to_cartesian(polar_data)
+        coords = polar_to_cartesian(polar_data).flatten()  # two columns - first is x column, second is y column, gets flattened
+        coords[np.isinf(coords)] = 0 # replace inf values with 0
+        coords = np.nan_to_num(coords) # replace nan values with 0
+        # np.savetxt("coords_post.txt", coords, delimiter=",")
+        coords = coords.tolist()
+
+
         
-        
-        msg = String()
-        msg.data = 'Hello World!'
+        # Create the Float32MultiArray message
+        msg = Float32MultiArray()
+
+        # Create the layout message
+        layout = MultiArrayLayout()
+        layout.dim.append(MultiArrayDimension())
+        layout.dim[0].label = "length"
+        layout.dim[0].size = len(coords)
+        layout.dim[0].stride = 2
+
+        # Set the layout of the message
+        msg.layout = layout
+
+        # Set the data of the message
+        msg.data = coords
+
+        # msg = String()
+        # msg.data = "Hello word"
         self.publisher.publish(msg)
+
 
         
 
@@ -145,58 +232,100 @@ class PeopleCounter(Node):
     def __init__(self):
         super().__init__('people_counter')
         self.publisher = self.create_publisher(String, 'person_locations', 10)
-        self.publisher = self.create_publisher(Int64, 'people_count_current', 10)
         self.publisher = self.create_publisher(Int64, 'people_count_total', 10)
-        timer_period = 0.5  # seconds
-        self.timer = self.create_timer(timer_period, self.timer_callback)
+        self.publisher = self.create_publisher(Int64, 'people_count_current', 10)
+
+        # timer_period = 0.5  # seconds
+        # self.timer = self.create_timer(timer_period, self.timer_callback)
+
+        # Get cartesian data to reformat it into n x 2 matrix
+        self.subscription = self.create_subscription(
+            Float32MultiArray, 
+            '/CartesianData', 
+            self.listener_callback, 
+            10
+        )
+    
+    def listener_callback(self, msg):
+        # Reformat back into n x 2 array
+        n = msg.layout.dim[0].size  # length of total
+        width = msg.layout.dim[0].stride  # == 2
+        coords = np.array(msg.data)
+
+        # Calculate the number of rows
+        rows = int(n / width)
+
+        # Create a new 2-D array of shape n x 2
+        coords = coords.reshape(rows, width)
+        
+        count = detect_humans(coords)
+        
+        
+
+        msg = Int64()
+        msg.data = count
+        self.publisher.publish(msg)
 
     
-    def timer_callback(self):
-        msg = String()
-        msg.data = 'Hello World: %d' % self.count
-        self.publisher.publish(msg)
-        self.get_logger().info('Publishing: "%s"' % msg.data)
-        self.count += 1
+    # def timer_callback(self):
+    #     msg = String()
+    #     msg.data = 'Hello World: %d' % self.count
+    #     self.publisher.publish(msg)
+    #     self.get_logger().info('Publishing: "%s"' % msg.data)
+    #     self.count += 1
 
-    def cluster_points(data, min_distance, min_points):
-        distance_matrix = squareform(pdist(data))
+    # def cluster_points(data, min_distance, min_points):
+    #     distance_matrix = squareform(pdist(data))
 
-        adjacency_matrix = (distance_matrix < min_distance).astype(int)
+    #     adjacency_matrix = (distance_matrix < min_distance).astype(int)
 
-        clustering = DBSCAN(eps=min_distance, min_samples=min_points, metric='precomputed')
-        labels = clustering.fit_predict(adjacency_matrix)
+    #     clustering = DBSCAN(eps=min_distance, min_samples=min_points, metric='precomputed')
+    #     labels = clustering.fit_predict(adjacency_matrix)
 
-    def compute_cluster_parameters(data, labels):
-        unique_labels = np.unique(labels)
-        cluster_parameters = []
+    # def compute_cluster_parameters(data, labels):
+    #     unique_labels = np.unique(labels)
+    #     cluster_parameters = []
 
-        for label in unique_labels:
-            if label == -1:
-                continue
+    #     for label in unique_labels:
+    #         if label == -1:
+    #             continue
 
-        cluster_data = data[labels == label]
-        min_coords = cluster_data.min(axis=0)
-        max_coords = cluster_data.max(axis=0)
-        size = max_coords - min_coords
-        circumference = 2 * (size[0] + size[1])
+    #     cluster_data = data[labels == label]
+    #     min_coords = cluster_data.min(axis=0)
+    #     max_coords = cluster_data.max(axis=0)
+    #     size = max_coords - min_coords
+    #     circumference = 2 * (size[0] + size[1])
         
-        # Compute the straightness
-        start, end = cluster_data[[0, -1]]
-        line = end - start
-        line_norm = np.linalg.norm(line)
-        line_unit = line / line_norm
-        straightness = np.mean(np.abs(np.cross(cluster_data - start, end - start))) / line_norm
+    #     # Compute the straightness
+    #     start, end = cluster_data[[0, -1]]
+    #     line = end - start
+    #     line_norm = np.linalg.norm(line)
+    #     line_unit = line / line_norm
+    #     straightness = np.mean(np.abs(np.cross(cluster_data - start, end - start))) / line_norm
 
-        cluster_parameters.append((size, circumference, straightness))
+    #     cluster_parameters.append((size, circumference, straightness))
 
 
 def main(args=None):
     rclpy.init(args=args)
     data_listener = DataScanListener()
+    ppl_counter = PeopleCounter()
     
-    print("Hello world")
-    rclpy.spin(data_listener)
-    rclpy.shutdown()
+
+    executor = SingleThreadedExecutor()
+    executor.add_node(data_listener)
+    executor.add_node(ppl_counter)
+
+    try:
+        executor.spin()
+    except KeyboardInterrupt:
+        pass
+
+    executor.shutdown()
+
+    # print("Hello world")
+    # rclpy.spin(data_listener)
+    # rclpy.shutdown()
 
 
 if __name__ == '__main__':
