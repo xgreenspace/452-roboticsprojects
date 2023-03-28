@@ -28,6 +28,101 @@ from sklearn.cluster import DBSCAN
 import os
 import sys
 
+
+
+class StaticObjectFilter:
+    def __init__(self):
+        self.history = []
+        self.history_length = 5
+        self.threshold = 0.5
+
+    def filter_static_objects(self, current_scan):
+        self.history.append(current_scan)
+        if len(self.history) > self.history_length:
+            self.history.pop(0)
+
+        if len(self.history) < self.history_length:
+            return current_scan  # Not enough history yet, return the current scan
+
+        # Calculate the median position of each point over the history
+        median_positions = np.median(self.history, axis=0)
+
+        # Remove points that are close to their median position
+        filtered_scan = []
+        for i, point in enumerate(current_scan):
+            distance = np.linalg.norm(point - median_positions[i])
+            if distance > self.threshold:
+                filtered_scan.append(point)
+
+        return np.array(filtered_scan)
+
+
+class HumanTracker:
+    def __init__(self):
+        self.tracks = []
+        self.match_threshold = 1.0
+        self.max_missed_frames = 3
+
+    def _match_tracks(self, new_clusters):
+        updated_tracks = []
+
+        for new_cluster in new_clusters:
+            min_distance = float('inf')
+            matched_track = None
+
+            for track in self.tracks:
+                cluster, missed_frames = track
+                distance = np.linalg.norm(cluster - new_cluster)
+
+                if distance < min_distance:
+                    min_distance = distance
+                    matched_track = track
+
+            if matched_track and min_distance < self.match_threshold:
+                updated_tracks.append((new_cluster, 0))
+            else:
+                updated_tracks.append((new_cluster, 0))
+
+        for track in self.tracks:
+            if not any(np.array_equal(track, updated_track) for updated_track in updated_tracks):
+                cluster, missed_frames = track
+                if missed_frames < self.max_missed_frames:
+                    updated_tracks.append((cluster, missed_frames + 1))
+
+        return updated_tracks
+
+
+    def detect_humans(self, points):
+        # Apply the DBSCAN clustering algorithm
+        clustering = DBSCAN(eps=0.5, min_samples=3).fit(points)
+
+        # Filter the clusters to find those that represent humans
+        new_human_clusters = []
+        for label in set(clustering.labels_):
+            if label == -1:
+                continue  # Ignore noise
+
+            cluster_points = points[clustering.labels_ == label]
+            cluster_size = cluster_points.ptp(axis=0)  # Get the size of the bounding box for the cluster
+
+            # Set constraints for the size of a human-like cluster
+            min_width, max_width = 0, 2
+            min_height, max_height = 0, 2
+
+            if min_width < cluster_size[0] < max_width and min_height < cluster_size[1] < max_height:
+                centroid = np.mean(cluster_points, axis=0)
+                new_human_clusters.append(centroid)
+
+        # Update tracks with new_human_clusters
+        self.tracks = self._match_tracks(new_human_clusters)
+
+        # Count humans with non-missed detections
+        human_count = len([track for track in self.tracks if track[1] == 0])
+
+        with open('human_count_better.txt', 'a') as f:
+            f.write(str(human_count) + "\n")    
+
+        return human_count
 # This is a simple test function to detect the number of people using DBSCAN
 def detect_humans(points):
     # Apply the DBSCAN clustering algorithm
@@ -245,6 +340,9 @@ class PeopleCounter(Node):
             self.listener_callback, 
             10
         )
+
+        self.counter = HumanTracker()
+        self.filter = StaticObjectFilter()
     
     def listener_callback(self, msg):
         # Reformat back into n x 2 array
@@ -257,13 +355,10 @@ class PeopleCounter(Node):
 
         # Create a new 2-D array of shape n x 2
         coords = coords.reshape(rows, width)
-        
-        count = detect_humans(coords)
-        
-        
-
+                
         msg = Int64()
-        msg.data = count
+        
+        msg.data = self.counter.detect_humans(self.filter.filter_static_objects(coords))
         self.publisher.publish(msg)
 
     
