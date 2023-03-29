@@ -2,6 +2,7 @@
 # ros2 interface show turtlesim/srv/SetPen
 
 import math
+import time
 import rclpy.node
 from rclpy.node import Node
 from rclpy.parameter import Parameter
@@ -54,6 +55,11 @@ class StaticObjectFilter:
             if distance > self.threshold:
                 filtered_scan.append(point)
 
+        filtered_scan = np.array(filtered_scan)
+
+        if np.all(filtered_scan == 0):
+            filtered_scan = np.array([[2,2], [2, 2]])
+
         return np.array(filtered_scan)
 
 
@@ -94,7 +100,7 @@ class HumanTracker:
 
     def detect_humans(self, points):
         # Apply the DBSCAN clustering algorithm
-        clustering = DBSCAN(eps=0.5, min_samples=3).fit(points)
+        clustering = DBSCAN(eps=1.5, min_samples=5).fit(points)
 
         # Filter the clusters to find those that represent humans
         new_human_clusters = []
@@ -123,32 +129,6 @@ class HumanTracker:
             f.write(str(human_count) + "\n")    
 
         return human_count
-# This is a simple test function to detect the number of people using DBSCAN
-def detect_humans(points):
-    # Apply the DBSCAN clustering algorithm
-    clustering = DBSCAN(eps=0.5, min_samples=3).fit(points)
-
-    # Filter the clusters to find those that represent humans
-    human_count = 0
-    for label in set(clustering.labels_):
-        if label == -1:
-            continue  # Ignore noise
-
-        cluster_points = points[clustering.labels_ == label]
-        cluster_size = cluster_points.ptp(axis=0)  # Get the size of the bounding box for the cluster
-
-        # Set constraints for the size of a human-like cluster
-        min_width, max_width = 0, 2
-        min_height, max_height = 0, 2
-
-        if min_width < cluster_size[0] < max_width and min_height < cluster_size[1] < max_height:
-            human_count += 1
-            # Compute centroid
-            # Write human_count to a file
-    with open('human_count.txt', 'a') as f:
-            f.write(str(human_count) + "\n")    
-            
-    return human_count
 
 
 def generate_clusters(data, distance_threshold=0.5, min_points=3):
@@ -273,20 +253,70 @@ class DataScanListener(Node):
             10
         )
         self.subscription  # prevent unused variable warning
-        
         self.publisher = self.create_publisher(Float32MultiArray, 'CartesianData', 10)  # Publish
+        self.lol = self.create_publisher(LaserScan, 'test', 10)
+        self.longest = {}
+
+    def filter_walls_obstacles(self, polar_data):
+
+        polar_data = polar_data.tolist()
+        T = 0.5 # Define your desired tolerance or threshold value
+        filtered = [] # of detected people
+        for radius, angle in polar_data:
+            # if radius == -np.inf:
+            #     radius = 1e7
+            # if radius == np.nan:
+            #     radius = 1e7
+            if angle not in self.longest:
+                self.longest[angle] = abs(radius)
+                filtered.append(np.array([np.inf, angle]))
+            elif abs(radius) >= self.longest[angle] + T:
+                self.longest[angle] = abs(radius)
+                filtered.append(np.array([np.inf, angle]))
+            elif abs(radius) < self.longest[angle] - T:
+                filtered.append(np.array([radius, angle]))
+            else:
+                filtered.append(np.array([np.inf, angle]))
+
+        with open('radius_angle', 'a') as f:
+            f.write(str(filtered))
+
+        filtered = np.array(filtered)
+        np.savetxt("filtered.txt", filtered, delimiter=',')
+
+        return filtered
 
         
     def listener_callback(self, msg):
         self.get_logger().info('LaserScan message received') # Check if message have been received
+
         ranges = np.array(msg.ranges)
         angles = np.linspace(msg.angle_min, msg.angle_max, len(ranges))  
         
-        print(ranges)
-        print(angles)
+        # polar_data = np.array([])
+        # while polar_data.ndim != 2:
+        
+        polar_data = np.column_stack((ranges, angles)) 
 
-        polar_data = np.column_stack((ranges, angles))
-        coords = polar_to_cartesian(polar_data).flatten()  # two columns - first is x column, second is y column, gets flattened
+        np.savetxt("polar_data.txt", polar_data, delimiter=',')
+
+        filtered_polar_data = self.filter_walls_obstacles(polar_data)
+        
+        np.savetxt("filtered_polar_data.txt", filtered_polar_data[:,0] , delimiter=',')
+        
+        """""""""
+        [[r1, a1],
+         [r2, a2],
+         ...]
+         -> [r1, r2, r3, ...]
+        """
+        
+        msg.ranges = list(filtered_polar_data[:,0].astype(float))  # publish this thing
+        
+        self.lol.publish(msg)
+
+        coords = polar_to_cartesian(filtered_polar_data).flatten()  # two columns - first is x column, second is y column, gets flattened
+        
         coords[np.isinf(coords)] = 0 # replace inf values with 0
         coords = np.nan_to_num(coords) # replace nan values with 0
         # np.savetxt("coords_post.txt", coords, delimiter=",")
@@ -328,7 +358,7 @@ class PeopleCounter(Node):
         super().__init__('people_counter')
         self.publisher = self.create_publisher(String, 'person_locations', 10)
         self.publisher = self.create_publisher(Int64, 'people_count_total', 10)
-        self.publisher = self.create_publisher(Int64, 'people_count_current', 10)
+        self.publisher = self.create_publisher(Int64, 'people_count_current', 10)  # Publish
 
         # timer_period = 0.5  # seconds
         # self.timer = self.create_timer(timer_period, self.timer_callback)
@@ -355,10 +385,11 @@ class PeopleCounter(Node):
 
         # Create a new 2-D array of shape n x 2
         coords = coords.reshape(rows, width)
-                
+
+        
         msg = Int64()
         
-        msg.data = self.counter.detect_humans(self.filter.filter_static_objects(coords))
+        msg.data = self.counter.detect_humans(self.filter.filter_static_objects(coords))#self.filter.filter_static_objects
         self.publisher.publish(msg)
 
     

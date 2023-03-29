@@ -1,0 +1,27 @@
+[0.520s] Invoking command in '/home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/src/project3': PYTHONPATH=/home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/build/project3/prefix_override:/home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/install/project3/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 setup.py egg_info --egg-base ../../build/project3 build --build-base /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/build/project3/build install --record /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/build/project3/install.log --single-version-externally-managed
+[0.707s] running egg_info
+[0.707s] writing ../../build/project3/project3.egg-info/PKG-INFO
+[0.708s] writing dependency_links to ../../build/project3/project3.egg-info/dependency_links.txt
+[0.708s] writing entry points to ../../build/project3/project3.egg-info/entry_points.txt
+[0.708s] writing requirements to ../../build/project3/project3.egg-info/requires.txt
+[0.708s] writing top-level names to ../../build/project3/project3.egg-info/top_level.txt
+[0.710s] reading manifest file '../../build/project3/project3.egg-info/SOURCES.txt'
+[0.710s] writing manifest file '../../build/project3/project3.egg-info/SOURCES.txt'
+[0.710s] running build
+[0.710s] running build_py
+[0.710s] copying project3/peopleCounter.py -> /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/build/project3/build/lib/project3
+[0.711s] running install
+[0.711s] /usr/lib/python3/dist-packages/setuptools/command/install.py:34: SetuptoolsDeprecationWarning: setup.py install is deprecated. Use build and pip and other standards-based tools.
+[0.711s]   warnings.warn(
+[0.711s] running install_lib
+[0.711s] copying /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/build/project3/build/lib/project3/peopleCounter.py -> /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/install/project3/lib/python3.10/site-packages/project3
+[0.712s] byte-compiling /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/install/project3/lib/python3.10/site-packages/project3/peopleCounter.py to peopleCounter.cpython-310.pyc
+[0.714s] running install_data
+[0.714s] running install_egg_info
+[0.715s] removing '/home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/install/project3/lib/python3.10/site-packages/project3-0.0.0-py3.10.egg-info' (and everything under it)
+[0.715s] Copying ../../build/project3/project3.egg-info to /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/install/project3/lib/python3.10/site-packages/project3-0.0.0-py3.10.egg-info
+[0.716s] running install_scripts
+[0.734s] Installing peopleCounter script to /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/install/project3/lib/project3
+[0.734s] Installing playBag script to /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/install/project3/lib/project3
+[0.734s] writing list of installed files to '/home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/build/project3/install.log'
+[0.760s] Invoked command in '/home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/src/project3' returned '0': PYTHONPATH=/home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/build/project3/prefix_override:/home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/install/project3/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 setup.py egg_info --egg-base ../../build/project3 build --build-base /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/build/project3/build install --record /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/build/project3/install.log --single-version-externally-managed
