@@ -1,0 +1,30 @@
+running egg_info
+writing ../../build/project3/project3.egg-info/PKG-INFO
+writing dependency_links to ../../build/project3/project3.egg-info/dependency_links.txt
+writing entry points to ../../build/project3/project3.egg-info/entry_points.txt
+writing requirements to ../../build/project3/project3.egg-info/requires.txt
+writing top-level names to ../../build/project3/project3.egg-info/top_level.txt
+reading manifest file '../../build/project3/project3.egg-info/SOURCES.txt'
+writing manifest file '../../build/project3/project3.egg-info/SOURCES.txt'
+running build
+running build_py
+copying project3/peopleCounter.py -> /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/build/project3/build/lib/project3
+running install
+/usr/lib/python3/dist-packages/setuptools/command/install.py:34: SetuptoolsDeprecationWarning: setup.py install is deprecated. Use build and pip and other standards-based tools.
+  warnings.warn(
+running install_lib
+copying /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/build/project3/build/lib/project3/peopleCounter.py -> /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/install/project3/lib/python3.10/site-packages/project3
+byte-compiling /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/install/project3/lib/python3.10/site-packages/project3/peopleCounter.py to peopleCounter.cpython-310.pyc
+  File "/home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/install/project3/lib/python3.10/site-packages/project3/peopleCounter.py", line 368
+    loc_msg.is_bigendian = False0.5
+                                 ^^
+SyntaxError: invalid syntax
+
+running install_data
+running install_egg_info
+removing '/home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/install/project3/lib/python3.10/site-packages/project3-0.0.0-py3.10.egg-info' (and everything under it)
+Copying ../../build/project3/project3.egg-info to /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/install/project3/lib/python3.10/site-packages/project3-0.0.0-py3.10.egg-info
+running install_scripts
+Installing peopleCounter script to /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/install/project3/lib/project3
+Installing playBag script to /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/install/project3/lib/project3
+writing list of installed files to '/home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/build/project3/install.log'

@@ -16,7 +16,7 @@ from geometry_msgs.msg import Twist
 from turtlesim.msg import Pose
 from rcl_interfaces.srv import SetParameters
 from rcl_interfaces.msg import Parameter, ParameterType, ParameterValue
-from sensor_msgs.msg import LaserScan
+from sensor_msgs.msg import LaserScan, PointCloud2, PointField
 from sklearn.neighbors import NearestNeighbors
 from filterpy.kalman import KalmanFilter
 
@@ -28,6 +28,96 @@ from sklearn.cluster import DBSCAN
 
 import os
 import sys
+
+
+
+class PersonParticleFilter:
+    # def __init__(self, n_particles=1000, dt=1.0, process_std=0.1, measurement_std=0.5, max_distance=1.0):
+    #     self.pf = ParticleFilter(dim_x=4, dim_z=2, N=n_particles)
+    #     self.pf.x[:, 0:2] = np.random.rand(n_particles, 2) * 10  # Initialize particle positions
+    #     self.pf.Q = np.diag([process_std**2] * 4)  # Process noise
+    #     self.pf.R = np.diag([measurement_std**2] * 2)  # Measurement noise
+    #     self.pf.dt = dt  # Time step
+    #     self.pf.F = np.array([[1, 0, dt, 0],  # State transition matrix
+    #                           [0, 1, 0, dt],
+    #                           [0, 0, 1, 0],
+    #                           [0, 0, 0, 1]])
+    #     self.pf.H = np.array([[1, 0, 0, 0],  # Measurement matrix
+    #                           [0, 1, 0, 0]])
+    #     self.tracks = {}
+    #     self.current_id = 0
+    #     self.max_distance = max_distance
+
+    # def update(self, centroids):
+    #     if len(self.tracks) == 0:
+    #         for centroid in centroids:
+    #             self.tracks[self.current_id] = {'pf': self.pf.copy()}
+    #             self.tracks[self.current_id]['pf'].x[:, 0:2] = centroid
+    #             self.current_id += 1
+    #     else:
+    #         for centroid in centroids:
+    #             distances = []
+    #             for track_id, track in self.tracks.items():
+    #                 mean_position = np.mean(track['pf'].x[:, 0:2], axis=0)
+    #                 distance = np.linalg.norm(mean_position - centroid)
+    #                 distances.append((track_id, distance))
+
+    #             closest_track_id, closest_distance = min(distances, key=lambda x: x[1])
+
+    #             if closest_distance < self.max_distance:
+    #                 self.tracks[closest_track_id]['pf'].update(np.array(centroid))
+    #             else:
+    #                 new_pf = self.pf.copy()
+    #                 new_pf.x[:, 0:2] = centroid
+    #                 self.tracks[self.current_id] = {'pf': new_pf}
+    #                 self.current_id += 1
+
+    #     return self.tracks
+    
+    def __init__(self, max_distance=0.5):
+        self.tracks = {}
+        self.current_id = 0
+        self.max_distance = max_distance
+    
+    def update(self, centroids):
+        # Initializes very first humans
+        if len(self.tracks) == 0:
+            for new_centroid in centroids:
+                self.tracks[self.current_id] = new_centroid
+                self.current_id += 1
+        else: # for the rest of the scans
+            for new_centroid in centroids:
+                # 1) Find the best matching centroid from the previous canidates to this current, new one to detect centroid motion (in any direction)
+                distances = []  # list of possible matching canidates
+                for track_id, prev_centroid in self.tracks.items():  # for each previous centroid compute the distance from it to current centroid
+                    distance = np.linalg.norm(prev_centroid - new_centroid)
+                    distances.append((track_id, distance))  # store as tuple so I can extract the id too 
+
+                closest_track_id, closest_distance = min(distances, key=lambda x: x[1])  # to compare tuple, we use a special key to compare by tuple's index 1 - the distance
+                
+                # 2) Decide whether its a new centroid or already seen
+                if closest_distance < self.max_distance:  # if the closest_distance is within some threshold, then the curr_centroid is probably the same centroid as the one we matched with
+                    self.tracks[closest_track_id] = new_centroid
+                else:
+                    self.tracks[self.current_id] = new_centroid # Otherwise, its a new centroid with a new id
+                    self.current_id += 1
+
+        return self.tracks
+
+# # Example usage
+# centroids = [
+#     np.array([2.0, 3.0]),
+#     np.array([5.0, 7.0])
+# ]
+
+# tracker = PersonParticleFilter(n_particles=1000, dt=1.0, process_std=0.1, measurement_std=0.5, max_distance=1.0)
+
+# while True:
+#     # Replace "centroids" with the new centroids from the live stream
+#     tracks = tracker.update(centroids)
+#     print("Tracks:", tracks)
+#     # Wait for the next centroids or sleep for a fixed interval
+
 
 
 
@@ -100,7 +190,7 @@ class HumanTracker:
 
     def detect_humans(self, points):
         # Apply the DBSCAN clustering algorithm
-        clustering = DBSCAN(eps=1.5, min_samples=5).fit(points)
+        clustering = DBSCAN(eps=1.5, min_samples=7).fit(points)
 
         # Filter the clusters to find those that represent humans
         new_human_clusters = []
@@ -112,8 +202,8 @@ class HumanTracker:
             cluster_size = cluster_points.ptp(axis=0)  # Get the size of the bounding box for the cluster
 
             # Set constraints for the size of a human-like cluster
-            min_width, max_width = 0, 2
-            min_height, max_height = 0, 2
+            min_width, max_width = 0.1, 3
+            min_height, max_height = 0.1, 3
 
             if min_width < cluster_size[0] < max_width and min_height < cluster_size[1] < max_height:
                 centroid = np.mean(cluster_points, axis=0)
@@ -126,13 +216,13 @@ class HumanTracker:
         human_count = len([track for track in self.tracks if track[1] == 0])
 
         with open('human_count_better.txt', 'a') as f:
-            f.write(str(human_count) + "\n")    
+            f.write(str(human_count) + "\n")
 
-        return human_count
+        return human_count, new_human_clusters
 
 
 
-        
+
 #node that subscribes to scan
 class DataScanListener(Node):
     def __init__(self):
@@ -151,16 +241,18 @@ class DataScanListener(Node):
     def filter_walls_obstacles(self, polar_data):
 
         polar_data = polar_data.tolist()
-        T = 0.5 # Define your desired tolerance or threshold value
+        T = 5 # Define your desired tolerance or threshold value
         filtered = [] # of detected people
         for radius, angle in polar_data:
+            if np.isinf(radius) or np.isnan(radius):
+                radius = np.inf
             if angle not in self.longest:
-                self.longest[angle] = abs(radius)
+                self.longest[angle] = radius
                 filtered.append(np.array([np.inf, angle]))
-            elif abs(radius) >= self.longest[angle] + T:
-                self.longest[angle] = abs(radius)
+            elif radius >= self.longest[angle] + T:
+                self.longest[angle] = radius
                 filtered.append(np.array([np.inf, angle]))
-            elif abs(radius) < self.longest[angle] - T:
+            elif radius < self.longest[angle] - T:
                 filtered.append(np.array([radius, angle]))
             else:
                 filtered.append(np.array([np.inf, angle]))
@@ -221,8 +313,6 @@ class DataScanListener(Node):
         # Set the data of the message
         msg.data = coords
 
-        # msg = String()
-        # msg.data = "Hello word"
         self.publisher.publish(msg)
 
 
@@ -230,20 +320,26 @@ class DataScanListener(Node):
 class PeopleCounter(Node):
     def __init__(self):
         super().__init__('people_counter')
-        self.publisher = self.create_publisher(String, 'person_locations', 10)
-        self.publisher = self.create_publisher(Int64, 'people_count_total', 10)
-        self.publisher = self.create_publisher(Int64, 'people_count_current', 10)  # Publish
-
+        self.pub_locs = self.create_publisher(PointCloud2, 'person_locations', 10)
+        self.pub_total = self.create_publisher(Int64, 'people_count_total', 10)
+        self.pub_curr = self.create_publisher(Int64, 'people_count_current', 10)  # Publish
         
+        self.blah = self.create_publisher(Float32MultiArray, 'testing', 10)
+
+
         self.subscription = self.create_subscription(
             Float32MultiArray, 
             '/CartesianData', 
             self.listener_callback, 
             10
         )
+        
 
         self.counter = HumanTracker()
         self.filter = StaticObjectFilter()
+        
+        self.tracker = PersonParticleFilter(3)
+
     
     def listener_callback(self, msg):
         # Reformat back into n x 2 array
@@ -258,12 +354,42 @@ class PeopleCounter(Node):
         coords = coords.reshape(rows, width)
 
         
-        msg = Int64()
+        curr_count = Int64()
+        loc_msg = PointCloud2()
         
-        msg.data = self.counter.detect_humans(self.filter.filter_static_objects(coords))#self.filter.filter_static_objects
-        self.publisher.publish(msg)
+        curr_count.data, centroids = self.counter.detect_humans(self.filter.filter_static_objects(coords))#self.filter.filter_static_objects
+        centroids = [(x, y, 0) for x, y in centroids]
+        centroids = np.array(centroids)
+        loc_msg.header.stamp = self.get_clock().now().to_msg()
+        loc_msg.header.frame_id = 'laser'
+        loc_msg.height = 1
+        loc_msg.width = len(centroids)
+        loc_msg.fields = [PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
+                          PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
+                          PointField(name='z', offset=8, datatype=PointField.FLOAT32, count=1)]
+        loc_msg.is_bigendian = False
+        loc_msg.point_step = 12*2
+        loc_msg.row_step = loc_msg.point_step * loc_msg.width
+        loc_msg.is_dense = True
+        loc_msg.data = centroids.tobytes()
+        
+        
+        self.pub_locs.publish(loc_msg)
+        self.pub_curr.publish(curr_count)
+        
+        
+        # Partical filter
+        tracks = self.tracker.update(centroids)
+        total_count = Int64()
+        total_count.data = len(tracks)
+        self.pub_total.publish(total_count)
+        
+        # print centroids
+        # with open("centroids.txt",'a+') as file:
+        #     file.write("\n")
+        #     file.write(np.array2string(centroids, separator=', '))
 
-    
+        
 
 #convert distance vectors (polar coordinates) to points in 2D (cartesian coordinates)
 def polar_to_cartesian(polar_data):

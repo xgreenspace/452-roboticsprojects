@@ -1,0 +1,7 @@
+/usr/lib/python3/dist-packages/setuptools/command/install.py:34: SetuptoolsDeprecationWarning: setup.py install is deprecated. Use build and pip and other standards-based tools.
+  warnings.warn(
+  File "/home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project3_ws/install/project3/lib/python3.10/site-packages/project3/peopleCounter.py", line 277
+    loc_msg.data = np.array([centroids).tobytes()
+                                      ^
+SyntaxError: closing parenthesis ')' does not match opening parenthesis '['
+
