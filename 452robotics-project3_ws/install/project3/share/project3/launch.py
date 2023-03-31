@@ -21,7 +21,10 @@ def generate_launch_description():
     
     bagPathName = LaunchConfiguration('bagPath')
     
+    
     ep = ExecuteProcess(cmd=['ros2', 'bag', 'play', bagPathName])
+    
+    bagOut = ExecuteProcess(cmd=['ros2', 'bag', 'record', '/person_locations', '/people_count_total', '/people_count_current', '-o', bagInName])
     
     #automatically terminate everything once the bag play finishes
     event_handler = OnProcessExit(target_action=ep,
@@ -29,5 +32,5 @@ def generate_launch_description():
     
     terminate_at_end = RegisterEventHandler(event_handler)
     
-    ld = LaunchDescription([bagIn, bagPath, terminate_at_end, ep, peopleCounter])
+    ld = LaunchDescription([bagIn, bagOut, bagPath, terminate_at_end, ep, peopleCounter])
     return ld

@@ -8,7 +8,7 @@ from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.executors import SingleThreadedExecutor
 from rosbag2_py import Player, StorageOptions, PlayOptions
-from std_msgs.msg import String, Int64
+from example_interfaces.msg import Int64
 from std_msgs.msg import MultiArrayDimension, MultiArrayLayout, Float32MultiArray
 
 
