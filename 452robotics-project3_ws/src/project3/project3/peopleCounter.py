@@ -202,12 +202,7 @@ class DataScanListener(Node):
         
         polar_data = np.column_stack((ranges, angles)) 
 
-        np.savetxt("polar_data.txt", polar_data, delimiter=',')
-
         filtered_polar_data = polar_data
-        
-    
-        
         
         msg.ranges = list(filtered_polar_data[:,0].astype(float))  # publish this thing
         
@@ -217,7 +212,6 @@ class DataScanListener(Node):
         
         coords[np.isinf(coords)] = 20 # replace inf values with 20
         coords = np.nan_to_num(coords) # replace nan values with 0
-        # np.savetxt("coords_post.txt", coords, delimiter=",")
         coords = coords.tolist()
 
         
