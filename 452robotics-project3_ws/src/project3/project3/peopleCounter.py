@@ -126,7 +126,7 @@ class StaticObjectFilter:
     def __init__(self):
         self.history = []
         self.history_length = 5
-        self.threshold = 0.5
+        self.threshold = 4  # old = 0.5
 
     def filter_static_objects(self, current_scan):
         self.history.append(current_scan)
@@ -149,7 +149,7 @@ class StaticObjectFilter:
         filtered_scan = np.array(filtered_scan)
 
         if np.all(filtered_scan == 0):
-            filtered_scan = np.array([[2,2], [2, 2]])
+            filtered_scan = np.array([[0,0]])
 
         return np.array(filtered_scan)
 
@@ -157,8 +157,8 @@ class StaticObjectFilter:
 class HumanTracker:
     def __init__(self):
         self.tracks = []
-        self.match_threshold = 1.0
-        self.max_missed_frames = 3
+        self.match_threshold = 2.0
+        self.max_missed_frames = 20
 
     def _match_tracks(self, new_clusters):
         updated_tracks = []
@@ -191,7 +191,7 @@ class HumanTracker:
 
     def detect_humans(self, points):
         # Apply the DBSCAN clustering algorithm
-        clustering = DBSCAN(eps=1.5, min_samples=7).fit(points)
+        clustering = DBSCAN(eps=0.2, min_samples=5).fit(points)
 
         # Filter the clusters to find those that represent humans
         new_human_clusters = []
@@ -203,10 +203,16 @@ class HumanTracker:
             cluster_size = cluster_points.ptp(axis=0)  # Get the size of the bounding box for the cluster
 
             # Set constraints for the size of a human-like cluster
-            min_width, max_width = 0.1, 3
-            min_height, max_height = 0.1, 3
+            min_width, max_width = 0.01, 1.5
+            min_height, max_height = 0.01, 2.2
+            # circularity_threshold = 0.0
+            # aspect_ratio_threshold = 0.0
+
+            # if len(cluster_points) > 5:
+            #     aspect_ration, circularity = analyze_cluster_shape(cluster_points)
 
             if min_width < cluster_size[0] < max_width and min_height < cluster_size[1] < max_height:
+                # if circularity > circularity_threshold and aspect_ration > aspect_ratio_threshold:
                 centroid = np.mean(cluster_points, axis=0)
                 new_human_clusters.append(centroid)
 
@@ -280,7 +286,8 @@ class DataScanListener(Node):
 
         np.savetxt("polar_data.txt", polar_data, delimiter=',')
 
-        filtered_polar_data = self.filter_walls_obstacles(polar_data)
+        #filtered_polar_data = self.filter_walls_obstacles(polar_data)
+        filtered_polar_data = polar_data
         
         np.savetxt("filtered_polar_data.txt", filtered_polar_data[:,0] , delimiter=',')
         
@@ -325,7 +332,8 @@ class PeopleCounter(Node):
         self.pub_total = self.create_publisher(Int64, 'people_count_total', 10)
         self.pub_curr = self.create_publisher(Int64, 'people_count_current', 10)  # Publish
         
-        self.blah = self.create_publisher(Float32MultiArray, 'testing', 10)
+        self.blah = self.create_publisher(Float32MultiArray, 'testing', 10) # for testing
+        self.filtered = self.create_publisher(PointCloud, 'filtered_points', 10) # for testing
 
 
         self.subscription = self.create_subscription(
@@ -339,7 +347,7 @@ class PeopleCounter(Node):
         self.counter = HumanTracker()
         self.filter = StaticObjectFilter()
         
-        self.tracker = PersonParticleFilter(3)
+        self.tracker = PersonParticleFilter(1)
 
     
     def listener_callback(self, msg):
@@ -362,20 +370,28 @@ class PeopleCounter(Node):
         centroids = np.array(centroids)
         
         loc_msg = PointCloud()
+        filtered_msg = PointCloud()
         
         loc_msg.header.stamp = self.get_clock().now().to_msg()
         loc_msg.header.frame_id = 'laser'
         
         points = [Point32(x=coord[0], y=coord[1], z=0.0) for coord in centroids]  #! remember to change back to centroids
+        # Partical filter
+        tracks = self.tracker.update(centroids)
+        tracked_persons = [Point32(x=tracks[key][0], y=tracks[key][1], z=0.0) for key in tracks]
         
-        loc_msg.points = points
+        loc_msg.points = tracked_persons
         
         self.pub_locs.publish(loc_msg)
         self.pub_curr.publish(curr_count)
         
+        filtered_msg.header.stamp = self.get_clock().now().to_msg()
+        filtered_msg.header.frame_id = 'laser'
         
-        # Partical filter
-        tracks = self.tracker.update(centroids)
+        filtered_points = [Point32(x=float(coord[0]), y=float(coord[1]), z=0.0) for coord in please_work]
+        filtered_msg.points = filtered_points
+        self.filtered.publish(filtered_msg)
+        
         total_count = Int64()
         total_count.data = len(tracks)
         self.pub_total.publish(total_count)
@@ -387,6 +403,17 @@ class PeopleCounter(Node):
       
 
 #convert distance vectors (polar coordinates) to points in 2D (cartesian coordinates)
+def analyze_cluster_shape(cluster_points):
+    hull = ConvexHull(cluster_points)
+    hull_area = hull.volume
+    hull_length = hull.area
+    hull_points = cluster_points[hull.vertices]
+
+    aspect_ratio = hull_length / hull_area
+    circularity = (4 * np.pi * hull_area) / (hull_length ** 2)
+
+    return aspect_ratio, circularity  
+
 def polar_to_cartesian(polar_data):
     # polar_data: A 2D NumPy array with columns [distance, angle (in radians)]
     x = polar_data[:, 0] * np.cos(polar_data[:, 1])
