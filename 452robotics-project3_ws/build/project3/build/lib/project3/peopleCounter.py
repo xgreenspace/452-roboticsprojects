@@ -190,7 +190,7 @@ class DataScanListener(Node):
         )
         self.subscription  # prevent unused variable warning
         self.publisher = self.create_publisher(Float32MultiArray, 'CartesianData', 10)  # Publish
-        self.lol = self.create_publisher(LaserScan, 'test', 10)
+        #self.laserData = self.create_publisher(LaserScan, 'test', 10)
         self.longest = {}
 
         
@@ -202,14 +202,11 @@ class DataScanListener(Node):
         
         polar_data = np.column_stack((ranges, angles)) 
 
-        filtered_polar_data = polar_data
+        msg.ranges = list(polar_data[:,0].astype(float))  # publish this thing
         
-        msg.ranges = list(filtered_polar_data[:,0].astype(float))  # publish this thing
-        
-        self.lol.publish(msg)
 
-        coords = polar_to_cartesian(filtered_polar_data).flatten()  # two columns - first is x column, second is y column, gets flattened
-        
+        # Converts polar to cartesian
+        coords = polar_to_cartesian(polar_data).flatten()  # two columns - first is x column, second is y column, gets flattened
         coords[np.isinf(coords)] = 20 # replace inf values with 20
         coords = np.nan_to_num(coords) # replace nan values with 0
         coords = coords.tolist()
