@@ -291,7 +291,7 @@ class DataScanListener(Node):
 
         coords = polar_to_cartesian(filtered_polar_data).flatten()  # two columns - first is x column, second is y column, gets flattened
         
-        coords[np.isinf(coords)] = 0 # replace inf values with 0
+        coords[np.isinf(coords)] = 20 # replace inf values with 0
         coords = np.nan_to_num(coords) # replace nan values with 0
         # np.savetxt("coords_post.txt", coords, delimiter=",")
         coords = coords.tolist()
@@ -384,9 +384,7 @@ class PeopleCounter(Node):
         # with open("centroids.txt",'a+') as file:
         #     file.write("\n")
         #     file.write(np.array2string(centroids, separator=', '))
-
-
-        
+      
 
 #convert distance vectors (polar coordinates) to points in 2D (cartesian coordinates)
 def polar_to_cartesian(polar_data):
