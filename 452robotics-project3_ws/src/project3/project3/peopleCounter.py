@@ -12,11 +12,11 @@ from std_msgs.msg import String, Int64
 from std_msgs.msg import MultiArrayDimension, MultiArrayLayout, Float32MultiArray
 
 
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, Point32
 from turtlesim.msg import Pose
 from rcl_interfaces.srv import SetParameters
 from rcl_interfaces.msg import Parameter, ParameterType, ParameterValue
-from sensor_msgs.msg import LaserScan, PointCloud2, PointField
+from sensor_msgs.msg import LaserScan, PointCloud, PointField
 from sklearn.neighbors import NearestNeighbors
 from filterpy.kalman import KalmanFilter
 
@@ -25,6 +25,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.spatial.distance import pdist, squareform
 from sklearn.cluster import DBSCAN
+from scipy.spatial import ConvexHull
 
 import os
 import sys
@@ -320,7 +321,7 @@ class DataScanListener(Node):
 class PeopleCounter(Node):
     def __init__(self):
         super().__init__('people_counter')
-        self.pub_locs = self.create_publisher(PointCloud2, 'person_locations', 10)
+        self.pub_locs = self.create_publisher(PointCloud, 'person_locations', 10)
         self.pub_total = self.create_publisher(Int64, 'people_count_total', 10)
         self.pub_curr = self.create_publisher(Int64, 'people_count_current', 10)  # Publish
         
@@ -353,26 +354,21 @@ class PeopleCounter(Node):
         # Create a new 2-D array of shape n x 2
         coords = coords.reshape(rows, width)
 
+        please_work = self.filter.filter_static_objects(coords)
         
         curr_count = Int64()
-        loc_msg = PointCloud2()
-        
-        curr_count.data, centroids = self.counter.detect_humans(self.filter.filter_static_objects(coords))#self.filter.filter_static_objects
+        curr_count.data, centroids = self.counter.detect_humans(please_work)#self.filter.filter_static_objects
         centroids = [(x, y, 0) for x, y in centroids]
         centroids = np.array(centroids)
+        
+        loc_msg = PointCloud()
+        
         loc_msg.header.stamp = self.get_clock().now().to_msg()
         loc_msg.header.frame_id = 'laser'
-        loc_msg.height = 1
-        loc_msg.width = len(centroids)
-        loc_msg.fields = [PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
-                          PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
-                          PointField(name='z', offset=8, datatype=PointField.FLOAT32, count=1)]
-        loc_msg.is_bigendian = False
-        loc_msg.point_step = 12*2
-        loc_msg.row_step = loc_msg.point_step * loc_msg.width
-        loc_msg.is_dense = True
-        loc_msg.data = centroids.tobytes()
         
+        points = [Point32(x=coord[0], y=coord[1], z=0.0) for coord in centroids]  #! remember to change back to centroids
+        
+        loc_msg.points = points
         
         self.pub_locs.publish(loc_msg)
         self.pub_curr.publish(curr_count)
@@ -388,6 +384,7 @@ class PeopleCounter(Node):
         # with open("centroids.txt",'a+') as file:
         #     file.write("\n")
         #     file.write(np.array2string(centroids, separator=', '))
+
 
         
 
@@ -448,6 +445,9 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+
+        
+
 
         
 
