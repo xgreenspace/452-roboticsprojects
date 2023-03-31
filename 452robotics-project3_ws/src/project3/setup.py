@@ -23,7 +23,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'playBag = project3.playBag:main',
+            #'playBag = project3.playBag:main',
             'peopleCounter = project3.peopleCounter:main',
             #'xy_arrays_publisher = project3.xy_arrays_publisher:main',
         ],

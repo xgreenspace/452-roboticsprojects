@@ -11,7 +11,6 @@ setup.py
 launch/launch.py
 project3/__init__.py
 project3/peopleCounter.py
-project3/playBag.py
 resource/project3
 test/test_copyright.py
 test/test_flake8.py

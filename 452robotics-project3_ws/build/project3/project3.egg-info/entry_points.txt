@@ -1,4 +1,3 @@
 [console_scripts]
 peopleCounter = project3.peopleCounter:main
-playBag = project3.playBag:main
 

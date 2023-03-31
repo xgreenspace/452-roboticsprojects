@@ -21,16 +21,19 @@ def generate_launch_description():
     
     bagPathName = LaunchConfiguration('bagPath')
     
+    bagInExec = ExecuteProcess(cmd=['ros2', 'bag', 'play', bagPathName])
     
-    ep = ExecuteProcess(cmd=['ros2', 'bag', 'play', bagPathName])
+    bagOut = DeclareLaunchArgument('bagOut', default_value = 'bagOut') #command line is: ros2 launch project3 launch.py bagIn:=example1 bagOut:=example1Out
+    # read in that new argument (not string)
+    bagOutName = LaunchConfiguration('bagOut')
     
-    bagOut = ExecuteProcess(cmd=['ros2', 'bag', 'record', '/person_locations', '/people_count_total', '/people_count_current', '-o', bagInName])
+    bagOutExec = ExecuteProcess(cmd=['ros2', 'bag', 'record', '/person_locations', '/people_count_total', '/people_count_current', '-o', bagOutName])
     
     #automatically terminate everything once the bag play finishes
-    event_handler = OnProcessExit(target_action=ep,
+    event_handler = OnProcessExit(target_action=bagInExec,
                               on_exit=[EmitEvent(event=Shutdown())])
     
     terminate_at_end = RegisterEventHandler(event_handler)
     
-    ld = LaunchDescription([bagIn, bagOut, bagPath, terminate_at_end, ep, peopleCounter])
+    ld = LaunchDescription([bagIn, bagOut, bagPath, terminate_at_end, bagInExec, bagOutExec, peopleCounter])
     return ld
