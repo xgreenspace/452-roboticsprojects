@@ -19,6 +19,7 @@ from rcl_interfaces.msg import Parameter, ParameterType, ParameterValue
 from sensor_msgs.msg import LaserScan, PointCloud, PointField
 from sklearn.neighbors import NearestNeighbors
 from filterpy.kalman import KalmanFilter
+from scipy.spatial.distance import cdist
 
 import numpy as np
 import pandas as pd
@@ -30,7 +31,92 @@ from scipy.spatial import ConvexHull
 import os
 import sys
 
+start_time = time.time()
+curr_frame = 0
 
+def euclidean_distance(a, b):
+    # Compute the Euclidean distance between two arrays a and b
+    return np.sqrt(np.sum(np.square(a - b)))
+
+def distance_between_arrays(A, B):
+    # Compute the pairwise distances between arrays A and B
+    distances = np.zeros((len(A), len(B)))
+    for i, a in enumerate(A):
+        for j, b in enumerate(B):
+            distances[i,j] = euclidean_distance(a, b)
+    return distances
+
+
+class CentroidTracker:
+    def __init__(self, dt, max_distance=2):
+        self.next_id = 0
+        self.filters = {}
+        self.max_distance = max_distance
+        self.dt = dt
+
+    def initialize_filter(self, centroid):
+        kf = KalmanFilter(dim_x=4, dim_z=2)
+        kf.x = np.array([centroid[0], centroid[1], 0, 0])  # Initial state [x, y, vx, vy]
+        kf.F = np.array([[1, 0, self.dt, 0],
+                         [0, 1, 0, self.dt],
+                         [0, 0, 1, 0],
+                         [0, 0, 0, 1]])  # State transition matrix
+        kf.H = np.array([[1, 0, 0, 0],
+                         [0, 1, 0, 0]])  # Observation matrix
+        kf.R = 0.5  # Measurement noise
+        kf.P = 0.5  # Initial uncertainty
+        return kf
+
+    def associate_centroids(self, new_centroids):
+        # 1) Initilization Step at the beginning - only runs one time
+        if not self.filters:
+            for centroid in new_centroids:
+                self.filters[self.next_id] = self.initialize_filter(centroid)
+                self.next_id += 1
+            return
+        # 2) Gets a list of the estimated centroieds by the kalman filter
+        filter_ids = list(self.filters.keys())
+        filter_centroids = np.array([kf.x[:2] for kf in self.filters.values()])  # [<kalman1>(x0, y0), (x1, y2), ...]
+        
+
+        # 3) Calculate distances between new centroids and existing filter centroids
+        # np.savetxt("centroids_new.txt", new_centroids, delimiter=',')
+        # np.savetxt("centroids_filter.txt", filter_centroids, delimiter=',')
+        distances = distance_between_arrays(new_centroids, filter_centroids)
+        
+        # 4) For each new centroid, decides if its a person we already seen or a completely new person by taking the distance between
+        for _ in range(min(len(new_centroids), len(filter_centroids))):
+            row_idx, col_idx = np.unravel_index(np.argmin(distances), distances.shape)  # gets the kalman filter and its closest centroid
+            min_distance = distances[row_idx, col_idx]
+            # 
+            if min_distance < self.max_distance:
+                filter_id = filter_ids[col_idx]
+                
+                measurement = new_centroids[row_idx]
+                vel = (measurement - self.filters[filter_id].H @ self.filters[filter_id].x) / self.dt
+                self.filters[filter_id].x[2:4] = vel  # self.kf.x = [x, y, vx, vy] -> [x, y, vx', vy']  dynamically changes the current state's velocities to estimate the next state's velocities        
+                self.filters[filter_id].update(new_centroids[row_idx])
+                distances[:, col_idx] = np.inf  # Mark this filter as used
+            else:
+                break
+
+        # Add new filters for unmatched centroids
+        for i in range(len(new_centroids)):
+            if np.all(distances[i] == np.inf):
+                self.filters[self.next_id] = self.initialize_filter(new_centroids[i])
+                self.next_id += 1
+
+    def predict(self):
+        for kf in self.filters.values():
+            kf.predict()
+
+    def get_centroids(self):
+        centroids = np.array([kf.x[:2] for kf in self.filters.values()])
+        velocities = np.array([kf.x[2:] for kf in self.filters.values()])
+        return centroids, velocities
+    
+    
+    
 
 class PersonParticleFilter:
     # def __init__(self, n_particles=1000, dt=1.0, process_std=0.1, measurement_std=0.5, max_distance=1.0):
@@ -82,6 +168,15 @@ class PersonParticleFilter:
     
     def update(self, centroids):
         # Initializes very first humans
+        # if len(self.tracks) >= 4:
+        #     for i in range(4):
+        #         delete self.tracks[i]
+
+        if curr_frame < 20:#time.time() - start_time < 1.8:
+            self.current_id = 0
+            self.tracks = {}
+            return self.tracks
+        
         if len(self.tracks) == 0:
             for new_centroid in centroids:
                 self.tracks[self.current_id] = new_centroid
@@ -104,6 +199,42 @@ class PersonParticleFilter:
                     self.current_id += 1
 
         return self.tracks
+    
+    
+
+
+class OurTracker:
+    
+    def __init__(self):
+        # id -> (centroid:(x,y), velocity_vecotor:(dx, dy))  (x, y, dx, dy)
+        self.centroids = {}
+        self.current_id = 0
+        self.max_distance = 1
+    
+    def ForecastAndValidate(self, new_centroids):
+        # 1) Forecast our current centroids to move forward
+        forecasted = []  # just a list of (x,y)'s, contrasting from self.centroids which is a 4-tuple
+        for id in self.centroids:
+            prev_state = self.centroids[id]
+            prev_centroid = prev_state[:2]
+            prev_velocity = prev_state[2:]
+            forecasted_centroid = (prev_centroid[0] + prev_velocity[0], prev_centroid[1] + prev_velocity[1])
+            forecasted.append(forecasted_centroid)
+        
+        # 2) Get the closest matching of the new centroids to our forecasted centroids
+        forcecast = forecasted[0]
+        max_distance = 1e300
+        for new_centroid in new_centroids:
+            distance = np.linalg.norm(prev_centroid - forcecast)
+            if distance < max_distance:
+                max_distance = distance
+                best_match = new_centroid
+        
+        # 3) Associate that best_match with the id
+        
+        
+
+
 
 # # Example usage
 # centroids = [
@@ -348,9 +479,13 @@ class PeopleCounter(Node):
         self.filter = StaticObjectFilter()
         
         self.tracker = PersonParticleFilter(1)
+        
+        self.kalman = CentroidTracker(0.0825)
 
     
     def listener_callback(self, msg):
+        global curr_frame
+        curr_frame += 1
         # Reformat back into n x 2 array
         n = msg.layout.dim[0].size  # length of total
         width = msg.layout.dim[0].stride  # == 2
@@ -366,7 +501,6 @@ class PeopleCounter(Node):
         
         curr_count = Int64()
         curr_count.data, centroids = self.counter.detect_humans(please_work)#self.filter.filter_static_objects
-        centroids = [(x, y, 0) for x, y in centroids]
         centroids = np.array(centroids)
         
         loc_msg = PointCloud()
@@ -375,12 +509,18 @@ class PeopleCounter(Node):
         loc_msg.header.stamp = self.get_clock().now().to_msg()
         loc_msg.header.frame_id = 'laser'
         
-        points = [Point32(x=coord[0], y=coord[1], z=0.0) for coord in centroids]  #! remember to change back to centroids
-        # Partical filter
+        points = [Point32(x=float(coord[0]), y=float(coord[1]), z=0.0) for coord in centroids]  #! remember to change back to centroids
+        # # Partical filter
         tracks = self.tracker.update(centroids)
-        tracked_persons = [Point32(x=tracks[key][0], y=tracks[key][1], z=0.0) for key in tracks]
+        tracked_persons = [Point32(x=float(tracks[key][0]), y=float(tracks[key][1]), z=0.0) for key in tracks]
         
-        loc_msg.points = tracked_persons
+        # Kalman Filter
+        # self.kalman.associate_centroids(centroids)
+        # self.kalman.predict()
+        # k_centroids, velocities = self.kalman.get_centroids()
+        # k_centroids = [Point32(x=float(coord[0]), y=float(coord[1]), z=0.0) for coord in k_centroids] 
+        
+        loc_msg.points = points
         
         self.pub_locs.publish(loc_msg)
         self.pub_curr.publish(curr_count)
@@ -400,6 +540,8 @@ class PeopleCounter(Node):
         # with open("centroids.txt",'a+') as file:
         #     file.write("\n")
         #     file.write(np.array2string(centroids, separator=', '))
+        
+        
       
 
 #convert distance vectors (polar coordinates) to points in 2D (cartesian coordinates)
@@ -460,7 +602,8 @@ def main(args=None):
         executor.spin()
     except KeyboardInterrupt:
         pass
-
+    
+    end_time = time.time()
     executor.shutdown()
 
     # print("Hello world")
