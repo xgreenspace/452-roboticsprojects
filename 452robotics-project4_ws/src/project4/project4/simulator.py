@@ -4,55 +4,50 @@ from rclpy.node import Node
 from rclpy.executors import SingleThreadedExecutor
 from disc_robot import *
 
+        
 
 
-class FileReader(Node):  # should be a service
-    def __init__(self):
-        super().__init__('FileReader')
-        self.URDF_publisher = self.create_publisher(?, 'RobotData', 10)
-        self.World_publisher = self.create_publisher(?, 'GridData', 10)
-        self.Frame_publisher = self.create(?, 'FrameData', 10)
-
-        
-        # filenames
-        world_filename = "brick.world"
-        robot_filename = "normal.robot"
-        
-        
 class DifferentialDriveSimulator(Node):
     def __init__(self):
-        super().__init__('FileReader')
+        super().__init__('DifferentialDrive')
         
-
 
 
 class LidarSimulator(Node):
     def __init__(self):
-        super().__init__('FileReader')
+        super().__init__('Lidar')
 
 
 class VelocitySimulator(Node):
     def __init__(self):
-        super().__init__('FileReader')
+        super().__init__('Velocity')
         
 
 class MainSimulator(Node):
     def __init__(self):
-        super().__init__('FileReader')
+        super().__init__('Main')
+        self.URDF_publisher = self.create_publisher(?, 'RobotData', 10)
+        self.World_publisher = self.create_publisher(?, 'GridData', 10)
+        self.Frame_publisher = self.create(?, 'FrameData', 10)
+
+        worldfile = "brick.world"
+        robotfile = "normal.robot"
 
         
         
 def main(args=None):
     rclpy.init(args=args)
-    freader = FileReader()
-    diffdrive = DifferentialDriveSimulator()
-    lidar = LidarSimulator()
-    
-    
+    n1 = DifferentialDriveSimulator()
+    n2 = LidarSimulator()
+    n3 = VelocitySimulator()  #! Gotta remove this one when we turn in
+    n4 = MainSimulator()
 
+    
     executor = SingleThreadedExecutor()
-    executor.add_node(data_listener)
-    executor.add_node(ppl_counter)
+    executor.add_node(n1)
+    executor.add_node(n2)
+    executor.add_node(n3)
+    executor.add_node(n4)
 
     try:
         executor.spin()
@@ -61,6 +56,7 @@ def main(args=None):
     
     end_time = time.time()
     executor.shutdown()
+
 
 if __name__ == "__main__":
     main()
