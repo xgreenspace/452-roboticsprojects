@@ -5,7 +5,7 @@ resolution: 0.30
 # The robot starts here, given as [x, y, theta], with
 # x and y in meters and theta in radians.
 # Coordinates are express in the 'world' frame.
-initial_pose: [0.6, 0.6, 1.57]
+initial_pose: [1.0, 2.2, 1.45]
 
 # Where are the obstacles?
 #   # = obstacle

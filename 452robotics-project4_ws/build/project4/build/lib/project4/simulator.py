@@ -49,6 +49,8 @@ class LidarSimulator(Node):
         self.rate = float(self.robotYaml['laser']['rate'])
         self.count = self.robotYaml['laser']['count']
         self.resolution = self.worldYaml['resolution']
+        self.error_variance = self.robotYaml['laser']['error_variance']
+        self.fail_probability = self.robotYaml['laser']['fail_probability']
         
         self.world_map = ParseMap(self.worldYaml["map"])
         self.world_map.reverse()
@@ -124,9 +126,6 @@ class LidarSimulator(Node):
                 if grid_y >= len(self.world_map):
                     grid_y = len(self.world_map) - 1
 
-                # with open('out.txt', 'w') as f:
-                #     f.write("The length of the map is {} and the width is {} \n".format(len(self.world_map), len(self.world_map[0])))
-                #     f.write(str(grid_x) + ", " + str(grid_y) + "\n")
 
                 return self.world_map[grid_y][grid_x] == 100 
             
@@ -143,7 +142,10 @@ class LidarSimulator(Node):
                     y = laser_origin.y + current_range * math.sin(angle)
 
                     if is_point_occupied(x, y):
-                        ranges.append(current_range)
+                        if np.random.random() > self.fail_probability:
+                            ranges.append(current_range + np.random.normal(0, np.sqrt(self.error_variance)))
+                        else:
+                            ranges.append(np.nan)
                         # points.append((x,y))
                         break
 
