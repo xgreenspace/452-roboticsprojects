@@ -4,12 +4,12 @@ from rclpy.node import Node
 from rclpy.executors import SingleThreadedExecutor
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile
 from tf2_ros import TransformBroadcaster, LookupException, ConnectivityException, ExtrapolationException
-from geometry_msgs.msg import TransformStamped, PoseStamped, Pose, Quaternion, Point
+from geometry_msgs.msg import TransformStamped, PoseStamped, Pose, Quaternion, Point, Twist
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
 from nav_msgs.msg import OccupancyGrid
 from tf2_geometry_msgs import do_transform_pose
-from std_msgs.msg import String
+from std_msgs.msg import String, Float64
 from sensor_msgs.msg import LaserScan, PointCloud
 import math
 from math import atan2
@@ -23,17 +23,160 @@ import yaml
 import numpy as np
 import os
 from ament_index_python.packages import get_package_share_directory
+import time
 
 
 
-
+def getSecs():
+    return time.time_ns() * 1e-9
 
 class DifferentialDriveSimulator(Node):
-    def __init__(self):
-        super().__init__('DifferentialDrive')
-        
     
+    def __init__(self, dataYaml):
+        super().__init__('DifferentialDrive')
+        self.robotYaml = dataYaml[0]
+        self.worldYaml = dataYaml[1]
+        self.length = self.robotYaml['wheels']['distance']
+        self.error_variance_left = self.robotYaml['wheels']['error_variance_left']
+        self.error_variance_right = self.robotYaml['wheels']['error_variance_right']
+        self.error_update_rate = self.robotYaml['wheels']['error_update_rate']
+        self.timer = getSecs()  # time.time_ns() is in nanoseconds. I will convert to seconds everytime I call it
+        self.prevUpdateState = None  # measures time passed since robot's state was updated. Diff from self.timer b/c self.timer is for checking if 1-sec has passed since last vel msg to stop the robot like turtlesim. prevUpdateState just measures the time passed since last called used for calculation delta_t. We measure b/c want more precision and timer might trigger late so precision lost
+
+        self.timer_rate = 0.01
+
+        self.vl = 0
+        self.vr = 0
+
+        self.subscription = self.create_subscription(
+            Float64, 
+            '/vl', 
+            self.vl_listener, 
+            10
+        )
+        self.subscription = self.create_subscription(
+            Float64, 
+            '/vr', 
+            self.vr_listener, 
+            10
+        )
+
+        self.subscription  # prevent unused variable warning
+
+        self.create_timer(self.timer_rate, self.UpdateState)
+
+        # For getting the current state:
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+
+
+        self.robot_pos_publisher = self.create_publisher(Twist, 'robot_pos', 10) 
+
+        self.my_state = np.array(self.worldYaml['initial_pose'])
+
+
+
+    def vl_listener(self, msg):
+        self.vl = msg.data
+        self.timer = getSecs()
+    
+
+    def vr_listener(self, msg):
+        self.vr = msg.data
+        self.timer = getSecs()
+     
+
+    def UpdateState(self):
+
+        # Initialize self.prevUpdateState. If this is the first time it's called, then return immediately b/c this is technically the starting time of the driving
+        if self.prevUpdateState is None:
+            
+            position_state = Twist()
+
+            position_state.linear.x = self.my_state[0]
+            position_state.linear.y = self.my_state[1]
+            position_state.linear.z = 0.0
+            
+            position_state.angular.z = self.my_state[2]
+
+            self.robot_pos_publisher.publish(position_state)
+            
+            self.prevUpdateState = getSecs()
+            return
+
+        # if getSecs() - self.timer < 1:  # else don't do anything
+            # Get the current state from the transform
+            # try:
+            #     self.tf_buffer.can_transform(
+
+            #         'world',
+            #         'base_link',
+            #         self.get_clock().now().to_msg(),
+            #         timeout=rclpy.time.Duration(seconds=5.0),
+            #     )
+            # except (LookupException, ConnectivityException, ExtrapolationException):
+            #     self.get_logger().error("Transform not available yet.")
+            #     return
+            
+            # # Get the transform
+            # try:
+            #     transform_base_to_laser = self.tf_buffer.lookup_transform(
+            #                     'world',
+            #                     'base_link',
+            #                     rclpy.time.Time())
+            # except LookupException as e:
+            #     self.get_logger().error(f"Error: {str(e)}")
+            
+            # # Calculate the current state
+            # q = transform_base_to_laser.transform.rotation  # quaternion
+            # robot_center = transform_base_to_laser.transform.translation
+
+            # # From the ICC slides
+            # x, y, theta = robot_center.x, robot_center.y, atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+
+        x, y, theta = self.my_state
+        state = self.my_state # np.array([x, y, theta])
+        # dt = getSecs() - self.prevUpdateState  # measures time duraction since last callback, should be around ~ self.timer_rate = 0.1
+        dt = self.timer_rate
+        try:
+            R = (self.length / 2.0) * (self.vr + self.vl) / (self.vr - self.vl)
+
+            omegalol = (self.vr - self.vl) / self.length
+
+            icc = np.array([x - R * np.sin(theta), y + R * np.cos(theta), 0.0])
         
+            dTheta = omegalol*dt
+
+            matrix = np.array([[np.cos(dTheta), -np.sin(dTheta), 0.0],
+                        [np.sin(dTheta), np.cos(dTheta), 0.0],
+                        [0.0, 0.0, 1.0]
+            ])
+            x_vec = state - icc
+            base_vec = icc + np.array([0.0, 0.0, dTheta])
+            new_state = matrix @ x_vec + base_vec  # [x, y, theta]
+            
+        except: # drive in straight line
+            distance = self.vr * dt
+            x += distance * np.cos(theta)
+            y += distance * np.sin(theta)
+            new_state = np.array([x, y, theta])
+            
+
+        self.my_state = new_state
+        
+        position_state = Twist()
+
+        position_state.linear.x = new_state[0]
+        position_state.linear.y = new_state[1]
+        position_state.linear.z = 0.0
+        
+        position_state.angular.z = new_state[2]
+
+        self.robot_pos_publisher.publish(position_state)
+
+            
+        self.prevUpdateState = getSecs()  # update prev timer
+
 
 
 class LidarSimulator(Node):
@@ -81,7 +224,7 @@ class LidarSimulator(Node):
                 'world',
                 'laser',
                 self.get_clock().now().to_msg(),
-                timeout=rclpy.time.Duration(seconds=5.0),
+                timeout=rclpy.time.Duration(seconds=0.001),
             )
         except (LookupException, ConnectivityException, ExtrapolationException):
             self.get_logger().error("Transform not available yet.")
@@ -243,7 +386,7 @@ class MainSimulator(Node):
         
         # TF Stuff
         self.br = TransformBroadcaster(self)
-        self.timer = self.create_timer(0.1, self.broadcast_world_to_base_link_transform)
+        self.timer = self.create_timer(0.001, self.broadcast_world_to_base_link_transform)
         
         # self.URDF_publisher = self.create_publisher(?, 'RobotData', 10)
         self.World_publisher = self.create_publisher(
@@ -255,6 +398,7 @@ class MainSimulator(Node):
                                         history=HistoryPolicy.KEEP_LAST,
                                         )
                                     )
+        
         # self.Frame_publisher = self.create(?, 'FrameData', 10)
 
         # worldfile = "brick.world"
@@ -279,11 +423,19 @@ class MainSimulator(Node):
         self.publish_occupancy_grid()
         self.timer = self.create_timer(1, self.publish_occupancy_grid)
         
+        self.subscription = self.create_subscription(
+            Twist, 
+            '/robot_pos', 
+            self.position_listener, 
+            10
+        )
         
+        self.current_pose = self.worldYaml['initial_pose']
+    
+    def position_listener(self, msg):
+        self.current_pose = [msg.linear.x, msg.linear.y, msg.angular.z]
         
-        self.RobotState_publisher = self.create_publisher(Pose, 'robot_pos', 10)  # Publish
-    
-    
+
     def publish_occupancy_grid(self):
         
         grid = OccupancyGrid()
@@ -302,34 +454,24 @@ class MainSimulator(Node):
 
 
     def broadcast_world_to_base_link_transform(self):
-        
-        pose = self.worldYaml['initial_pose']
-        
+                
         t = TransformStamped()
         t.header.stamp = self.get_clock().now().to_msg()
         t.header.frame_id = 'world'
         t.child_frame_id = 'base_link'
-        t.transform.translation.x = pose[0]
-        t.transform.translation.y = pose[1]
+        t.transform.translation.x = self.current_pose[0]
+        t.transform.translation.y = self.current_pose[1]
         t.transform.translation.z = 0.0
         # t.transform.rotation.x = 0.0
         # t.transform.rotation.y = 0.0
         # t.transform.rotation.z = pose[2]
         
-        quaternion = quaternion_from_euler(0, 0, pose[2])
+        quaternion = quaternion_from_euler(0, 0, self.current_pose[2])
         t.transform.rotation = quaternion
 
 
         self.br.sendTransform(t)
-        
-        
-        # Define the input Pose2D
-        input_pose = Pose()
-        input_pose.position.x = pose[0]
-        input_pose.position.y = pose[1]
-        input_pose.position.z = 0.0
-        input_pose.orientation = quaternion
-        self.RobotState_publisher.publish(input_pose)
+
         
     # def collision_detection(self, msg):
     #     if msg.x < self.min_x or msg.x > self.max_x or msg.y < self.min_y or msg.y > self.max_y:
@@ -356,14 +498,14 @@ def main(args=None):
     
     
     rclpy.init(args=args)
-    # n1 = DifferentialDriveSimulator()
+    n1 = DifferentialDriveSimulator(dataYaml)
     n2 = LidarSimulator(dataYaml)
     # n3 = VelocitySimulator()  #! Gotta remove this one when we turn in
     n4 = MainSimulator(dataYaml)
 
     
     executor = SingleThreadedExecutor()
-    # executor.add_node(n1)
+    executor.add_node(n1)
     executor.add_node(n2)
     # executor.add_node(n3)
     executor.add_node(n4)
