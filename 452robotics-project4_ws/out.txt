@@ -1,0 +1,2 @@
+The length of the map is 12 and the width is 18 
+0, 0

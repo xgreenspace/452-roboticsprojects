@@ -10,7 +10,9 @@ from tf2_ros.transform_listener import TransformListener
 from nav_msgs.msg import OccupancyGrid
 from tf2_geometry_msgs import do_transform_pose
 from std_msgs.msg import String
+from sensor_msgs.msg import LaserScan, PointCloud
 import math
+from math import atan2
 
 
 from tf2_msgs.msg import TFMessage
@@ -35,18 +37,26 @@ class DifferentialDriveSimulator(Node):
 
 
 class LidarSimulator(Node):
-    def __init__(self):
+    def __init__(self, dataYaml):
         super().__init__('Lidar')
-    
-        self.subscription = self.create_subscription(
-                Pose, 
-                '/robot_pos', 
-                self.listener_callback, 
-                10
-            )
-        self.subscription  # prevent unused variable warning
         
-        self.publisher = self.create_publisher(String, 'testlaser', 10)  # Publish
+        self.robotYaml = dataYaml[0]
+        self.worldYaml = dataYaml[1]
+        self.angle_min = self.robotYaml['laser']['angle_min']
+        self.angle_max = self.robotYaml['laser']['angle_max']
+        self.range_min = self.robotYaml['laser']['range_min']
+        self.range_max = self.robotYaml['laser']['range_max']
+        self.rate = float(self.robotYaml['laser']['rate'])
+        self.count = self.robotYaml['laser']['count']
+        self.resolution = self.worldYaml['resolution']
+        
+        self.world_map = ParseMap(self.worldYaml["map"])
+        self.world_map.reverse()
+
+    
+        self.create_timer(self.rate, self.listener_callback)
+        
+        self.publisher = self.create_publisher(LaserScan, 'scan', 10)  # Publish
         
         
         self.tf_buffer = Buffer()
@@ -54,21 +64,21 @@ class LidarSimulator(Node):
 
 
     
-    def listener_callback(self, pose:Pose):
+    def listener_callback(self):
         
         # Create a PoseStamped message with the input Pose2D and input frame id
-        pose_stamped = PoseStamped()
-        pose_stamped.header.frame_id = "base_link"
-        pose_stamped.header.stamp = self.get_clock().now().to_msg()
-        pose_stamped.pose = pose 
+        # pose_stamped = PoseStamped()
+        # pose_stamped.header.frame_id = "world"
+        # pose_stamped.header.stamp = self.get_clock().now().to_msg()
+        # pose_stamped.pose = pose 
         
         
         try:
             self.tf_buffer.can_transform(
 
-                'baselink',
+                'world',
                 'laser',
-                pose_stamped.header.stamp,
+                self.get_clock().now().to_msg(),
                 timeout=rclpy.time.Duration(seconds=5.0),
             )
         except (LookupException, ConnectivityException, ExtrapolationException):
@@ -78,26 +88,88 @@ class LidarSimulator(Node):
         
         # Get the transform
         try:
-            #identity pose
-            identity_pose = Pose()
-            identity_pose.position = Point(x=0.0, y=0.0, z=0.0)
-            identity_pose.orientation.w = 1.0
-            
             #transform pose
-            transform = self.tf_buffer.lookup_transform(
-                            'base_link',
+            transform_base_to_laser = self.tf_buffer.lookup_transform(
+                            'world',
                             'laser',
                             rclpy.time.Time())
-
-            transformed_pose = do_transform_pose(pose, transform)
             
-            test = String()
-            test.data = str(transformed_pose.position.x) + " " + str(transformed_pose.position.y) + " " + str(euler_from_quaternion(transformed_pose.orientation)[2])
-            self.publisher.publish(test)
+            
+            q = transform_base_to_laser.transform.rotation  # quaternion
+            laser_rotation = atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 *
+                                   (q.y * q.y + q.z * q.z))
+            laser_origin = transform_base_to_laser.transform.translation
+            laser_origin.x
+            laser_origin.y
+
+            
+            
+            laser_range_angle = self.angle_min + laser_rotation
+            laser_angles = np.linspace(laser_range_angle, self.angle_max + laser_rotation, self.count)
+            
+            
+            def is_point_occupied(x, y):
+                grid_x = int(x / self.resolution)
+                grid_y = int(y / self.resolution)
+                
+                
+                if grid_x < 0:
+                    grid_x = 0
+                if grid_y < 0:
+                    grid_y = 0
+
+                if grid_x >= len(self.world_map[0]):
+                    grid_x = len(self.world_map[0]) - 1
+
+                if grid_y >= len(self.world_map):
+                    grid_y = len(self.world_map) - 1
+
+                # with open('out.txt', 'w') as f:
+                #     f.write("The length of the map is {} and the width is {} \n".format(len(self.world_map), len(self.world_map[0])))
+                #     f.write(str(grid_x) + ", " + str(grid_y) + "\n")
+
+                return self.world_map[grid_y][grid_x] == 100 
+            
+            
+            ranges = []
+            # points = []
+            for angle in laser_angles:
+                
+                current_range = 0.0
+                step_size = self.resolution / 10  # Step size can be adjusted for accuracy and performance
+
+                while current_range <= self.range_max:
+                    x = laser_origin.x + current_range * math.cos(angle)
+                    y = laser_origin.y + current_range * math.sin(angle)
+
+                    if is_point_occupied(x, y):
+                        ranges.append(current_range)
+                        # points.append((x,y))
+                        break
+
+                    current_range += step_size
+                if current_range > self.range_max:
+                    ranges.append(np.inf)
+            
+            # Lasers
+            msg = LaserScan()
+            msg.ranges = ranges
+            msg.angle_min = self.angle_min
+            msg.angle_max = self.angle_max
+            msg.angle_increment = laser_angles[1] - laser_angles[0]
+            msg.scan_time = self.rate
+            msg.time_increment = 0.0
+            msg.range_min = self.range_min
+            msg.range_max = self.range_max
+            msg.header.stamp = self.get_clock().now().to_msg()
+            msg.header.frame_id = 'laser'
+            
+            self.publisher.publish(msg)
+                    
+                    
         except LookupException as e:
             self.get_logger().error(f"Error: {str(e)}")
         
-
     
 def quaternion_from_euler(roll, pitch, yaw):
     """
@@ -164,7 +236,7 @@ class VelocitySimulator(Node):
         
 
 class MainSimulator(Node):
-    def __init__(self, ):
+    def __init__(self, dataYaml):
         super().__init__('Main')
         
         # TF Stuff
@@ -183,15 +255,17 @@ class MainSimulator(Node):
                                     )
         # self.Frame_publisher = self.create(?, 'FrameData', 10)
 
-        worldfile = "brick.world"
-        robotfile = "normal.robot"
+        # worldfile = "brick.world"
+        # robotfile = "normal.robot"
         
         
-        robotfile = os.path.join(get_package_share_directory('project4'), robotfile)
-        worldfile = os.path.join(get_package_share_directory('project4'), worldfile)
+        # robotfile = os.path.join(get_package_share_directory('project4'), robotfile)
+        # worldfile = os.path.join(get_package_share_directory('project4'), worldfile)
         
-        self.robotYaml = load_disc_robot(robotfile)
-        self.worldYaml = ReadWorldFile(worldfile)
+        self.robotYaml = dataYaml[0]
+        self.worldYaml = dataYaml[1]
+    
+
         self.world_map = ParseMap(self.worldYaml["map"])
         self.world_height = len(self.world_map)
         self.world_width = len(self.world_map[0])
@@ -263,11 +337,27 @@ class MainSimulator(Node):
 
         
 def main(args=None):
+    
+    
+    # Read Files
+    
+    worldfile = "brick.world"
+    robotfile = "normal.robot"
+    
+    robotfile = os.path.join(get_package_share_directory('project4'), robotfile)
+    worldfile = os.path.join(get_package_share_directory('project4'), worldfile)
+    
+    robotYaml = load_disc_robot(robotfile)
+    worldYaml = ReadWorldFile(worldfile)
+
+    dataYaml = (robotYaml, worldYaml)
+    
+    
     rclpy.init(args=args)
     # n1 = DifferentialDriveSimulator()
-    n2 = LidarSimulator()
+    n2 = LidarSimulator(dataYaml)
     # n3 = VelocitySimulator()  #! Gotta remove this one when we turn in
-    n4 = MainSimulator()
+    n4 = MainSimulator(dataYaml)
 
     
     executor = SingleThreadedExecutor()
