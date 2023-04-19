@@ -134,34 +134,7 @@ class DifferentialDriveSimulator(Node):
             return
 
         if time.time() - self.timer < 1:  # else don't do anything
-            # Get the current state from the transform
-            # try:
-            #     self.tf_buffer.can_transform(
 
-            #         'world',
-            #         'base_link',
-            #         self.get_clock().now().to_msg(),
-            #         timeout=rclpy.time.Duration(seconds=5.0),
-            #     )
-            # except (LookupException, ConnectivityException, ExtrapolationException):
-            #     self.get_logger().error("Transform not available yet.")
-            #     return
-            
-            # # Get the transform
-            # try:
-            #     transform_base_to_laser = self.tf_buffer.lookup_transform(
-            #                     'world',
-            #                     'base_link',
-            #                     rclpy.time.Time())
-            # except LookupException as e:
-            #     self.get_logger().error(f"Error: {str(e)}")
-            
-            # # Calculate the current state
-            # q = transform_base_to_laser.transform.rotation  # quaternion
-            # robot_center = transform_base_to_laser.transform.translation
-
-            # # From the ICC slides
-            # x, y, theta = robot_center.x, robot_center.y, atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
         
             x, y, theta = self.my_state
             state = self.my_state # np.array([x, y, theta])
