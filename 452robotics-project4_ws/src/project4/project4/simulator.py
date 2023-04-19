@@ -27,8 +27,8 @@ import time
 
 
 
-def getSecs():
-    return time.time_ns() * 1e-9
+# def getSecs():
+#     return time.time()
 
 class DifferentialDriveSimulator(Node):
     
@@ -36,11 +36,14 @@ class DifferentialDriveSimulator(Node):
         super().__init__('DifferentialDrive')
         self.robotYaml = dataYaml[0]
         self.worldYaml = dataYaml[1]
+        self.resolution = self.worldYaml['resolution']
         self.length = self.robotYaml['wheels']['distance']
         self.error_variance_left = self.robotYaml['wheels']['error_variance_left']
         self.error_variance_right = self.robotYaml['wheels']['error_variance_right']
         self.error_update_rate = self.robotYaml['wheels']['error_update_rate']
-        self.timer = getSecs()  # time.time_ns() is in nanoseconds. I will convert to seconds everytime I call it
+        self.radius = self.robotYaml['body']['radius']
+        
+        self.timer = time.time()  # time.time_ns() is in nanoseconds. I will convert to seconds everytime I call it
         self.prevUpdateState = None  # measures time passed since robot's state was updated. Diff from self.timer b/c self.timer is for checking if 1-sec has passed since last vel msg to stop the robot like turtlesim. prevUpdateState just measures the time passed since last called used for calculation delta_t. We measure b/c want more precision and timer might trigger late so precision lost
 
         self.timer_rate = 0.01
@@ -48,6 +51,9 @@ class DifferentialDriveSimulator(Node):
         self.vl = 0
         self.vr = 0
 
+        self.true_vl = 0
+        self.true_vr = 0
+        
         self.subscription = self.create_subscription(
             Float64, 
             '/vl', 
@@ -73,17 +79,40 @@ class DifferentialDriveSimulator(Node):
         self.robot_pos_publisher = self.create_publisher(Twist, 'robot_pos', 10) 
 
         self.my_state = np.array(self.worldYaml['initial_pose'])
+        
+        
+        
+        self.world_map = ParseMap(self.worldYaml["map"])
+        self.world_map.reverse()  # row major order starting with (0, 0) at the top
+        
+        self.create_timer(self.error_update_rate, self.UpdateError)
+        
+        
+        self.firstl = True
+        self.firstr = True
 
 
+    def UpdateError(self):
+        self.vl = self.true_vl * np.random.normal(1, np.sqrt(self.error_variance_left))
+        self.vr = self.true_vr * np.random.normal(1, np.sqrt(self.error_variance_right))
+    
 
     def vl_listener(self, msg):
-        self.vl = msg.data
-        self.timer = getSecs()
+        self.true_vl = msg.data
+        self.timer = time.time()
+        
+        if self.firstl:
+            self.vl = self.true_vl
+            self.firstl = False
     
 
     def vr_listener(self, msg):
-        self.vr = msg.data
-        self.timer = getSecs()
+        self.true_vr = msg.data
+        self.timer = time.time()
+        
+        if self.firstr:
+            self.vr = self.true_vr
+            self.firstr = False
      
 
     def UpdateState(self):
@@ -93,7 +122,7 @@ class DifferentialDriveSimulator(Node):
             
             position_state = Twist()
 
-            position_state.linear.x = self.my_state[0]
+            position_state.linear.x = self.my_state[0] 
             position_state.linear.y = self.my_state[1]
             position_state.linear.z = 0.0
             
@@ -101,10 +130,10 @@ class DifferentialDriveSimulator(Node):
 
             self.robot_pos_publisher.publish(position_state)
             
-            self.prevUpdateState = getSecs()
+            self.prevUpdateState = time.time()
             return
 
-        # if getSecs() - self.timer < 1:  # else don't do anything
+        if time.time() - self.timer < 1:  # else don't do anything
             # Get the current state from the transform
             # try:
             #     self.tf_buffer.can_transform(
@@ -133,49 +162,139 @@ class DifferentialDriveSimulator(Node):
 
             # # From the ICC slides
             # x, y, theta = robot_center.x, robot_center.y, atan2(2.0 * (q.w * q.z + q.x * q.y), 1.0 - 2.0 * (q.y * q.y + q.z * q.z))
-
-        x, y, theta = self.my_state
-        state = self.my_state # np.array([x, y, theta])
-        # dt = getSecs() - self.prevUpdateState  # measures time duraction since last callback, should be around ~ self.timer_rate = 0.1
-        dt = self.timer_rate
-        try:
-            R = (self.length / 2.0) * (self.vr + self.vl) / (self.vr - self.vl)
-
-            omegalol = (self.vr - self.vl) / self.length
-
-            icc = np.array([x - R * np.sin(theta), y + R * np.cos(theta), 0.0])
         
-            dTheta = omegalol*dt
+            x, y, theta = self.my_state
+            state = self.my_state # np.array([x, y, theta])
+            # dt = getSecs() - self.prevUpdateState  # measures time duraction since last callback, should be around ~ self.timer_rate = 0.1
+            dt = self.timer_rate
+            try:
+                R = (self.length / 2.0) * (self.vr + self.vl) / (self.vr - self.vl)
 
-            matrix = np.array([[np.cos(dTheta), -np.sin(dTheta), 0.0],
-                        [np.sin(dTheta), np.cos(dTheta), 0.0],
-                        [0.0, 0.0, 1.0]
-            ])
-            x_vec = state - icc
-            base_vec = icc + np.array([0.0, 0.0, dTheta])
-            new_state = matrix @ x_vec + base_vec  # [x, y, theta]
+                omegalol = (self.vr - self.vl) / self.length
+
+                icc = np.array([x - R * np.sin(theta), y + R * np.cos(theta), 0.0])
             
-        except: # drive in straight line
-            distance = self.vr * dt
-            x += distance * np.cos(theta)
-            y += distance * np.sin(theta)
-            new_state = np.array([x, y, theta])
+                dTheta = omegalol*dt
+
+                matrix = np.array([[np.cos(dTheta), -np.sin(dTheta), 0.0],
+                            [np.sin(dTheta), np.cos(dTheta), 0.0],
+                            [0.0, 0.0, 1.0]
+                ])
+                x_vec = state - icc
+                base_vec = icc + np.array([0.0, 0.0, dTheta])
+                new_state = matrix @ x_vec + base_vec  # [x, y, theta]
+                
+            except: # drive in straight line
+                distance = self.vr * dt
+                x += distance * np.cos(theta)
+                y += distance * np.sin(theta)
+                new_state = np.array([x, y, theta])
             
+            def cartesian_to_index(x, y):
+                j = int(x / self.resolution)
+                i = int(y / self.resolution)
+                return i, j
+            
+            def is_point_occupied(i, j):
+                
+                if j < 0:
+                    j = 0
+                if i < 0:
+                    i = 0
 
-        self.my_state = new_state
-        
-        position_state = Twist()
+                if j >= len(self.world_map[0]):
+                    j = len(self.world_map[0]) - 1
 
-        position_state.linear.x = new_state[0]
-        position_state.linear.y = new_state[1]
-        position_state.linear.z = 0.0
-        
-        position_state.angular.z = new_state[2]
+                if i >= len(self.world_map):
+                    i = len(self.world_map) - 1
 
-        self.robot_pos_publisher.publish(position_state)
+
+                return self.world_map[i][j] == 100 
+            
+            
+            # gets the neighbors of robot
+            def check_neighbors_wall(i, j, robotx, roboty):
+                
+                if is_point_occupied(i, j):
+                    return True
+                            
+                # neighbor square obstacles to the left or right
+                ys = [(i-1, j), (i+1, j)]
+                # neighbor square obstacles to the top or bottom
+                xs = [(i, j - 1), (i, j+1)]
+                
+                # filter empyty grids from neighbors
+                xs = [a for a in xs if is_point_occupied(*a)]
+                ys = [a for a in ys if is_point_occupied(*a)]
+
+                
+
+                for _, squarex in xs:
+                    # 1 ) calculate center of this square
+                    centerx = (squarex + 0.5) * self.resolution
+                    # 2 ) calculate distance of robot and center of square in the x direction
+                    if abs(robotx - centerx) < self.resolution/2 + self.radius:                                                    
+                        return True
+                    
+                for squarey, _ in ys:
+                    # 1 ) calculate center of this square
+                    centery = (squarey + 0.5) * self.resolution
+                    # 2 ) calculate distance of robot and center of square in the x direction
+                    if abs(roboty - centery) < self.resolution/2 + self.radius:                                                    
+                        return True
+                    
+                
+                # bottom left square, check top right corner
+                if is_point_occupied(i-1, j-1):
+                    cornery = self.resolution*i
+                    cornerx = self.resolution*j
+                    if np.linalg.norm(np.array([cornerx, cornery]) - np.array(robotx, roboty)) < self.radius:
+                        return True
+                #  top left square
+                if is_point_occupied(i+1, j-1):
+                    cornery = self.resolution*(i+1)
+                    cornerx = self.resolution*j
+                    if np.linalg.norm(np.array([cornerx, cornery]) - np.array(robotx, roboty)) < self.radius:
+                        return True
+                # bottom right square
+                if is_point_occupied(i-1, j+1):
+                    cornery = self.resolution*i
+                    cornerx = self.resolution*(j+1)
+                    if np.linalg.norm(np.array([cornerx, cornery]) - np.array(robotx, roboty)) < self.radius:
+                        return True
+                # top right square
+                if is_point_occupied(i+1, j+1):
+                    cornery = self.resolution*(i+1)
+                    cornerx = self.resolution*(j+1)
+                    if np.linalg.norm(np.array([cornerx, cornery]) - np.array(robotx, roboty)) < self.radius:
+                        return True
+                    
+                
+                
+                    
+            # Use coords of robot
+            x, y, theta = new_state
+            i, j = cartesian_to_index(x, y)
+            
+            # Find neighbors of robot's cell
+            if check_neighbors_wall(i, j, x, y):
+                self.my_state[2] = new_state[2]
+            else:
+                self.my_state = new_state 
 
             
-        self.prevUpdateState = getSecs()  # update prev timer
+            position_state = Twist()
+
+            position_state.linear.x = self.my_state[0]
+            position_state.linear.y = self.my_state[1]
+            position_state.linear.z = 0.0
+            
+            position_state.angular.z = self.my_state[2]
+
+            self.robot_pos_publisher.publish(position_state)
+
+            
+        self.prevUpdateState = time.time()  # update prev timer
 
 
 
