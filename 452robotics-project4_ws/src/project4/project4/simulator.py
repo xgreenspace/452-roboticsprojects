@@ -565,8 +565,8 @@ def main(args=None):
     
     # Read Files
     
-    worldfile = "brick.world"
-    robotfile = "normal.robot"
+    worldfile = "ell.world"
+    robotfile = "bad.robot"
     
     robotfile = os.path.join(get_package_share_directory('project4'), robotfile)
     worldfile = os.path.join(get_package_share_directory('project4'), worldfile)

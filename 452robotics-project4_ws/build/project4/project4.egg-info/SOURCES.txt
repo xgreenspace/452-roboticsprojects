@@ -8,9 +8,15 @@ setup.py
 ../../build/project4/project4.egg-info/requires.txt
 ../../build/project4/project4.egg-info/top_level.txt
 ../../build/project4/project4.egg-info/zip-safe
+launch/bad.robot
 launch/brick.world
+launch/ell.world
+launch/ideal.robot
 launch/launch.py
 launch/normal.robot
+launch/open.world
+launch/pillars.world
+launch/rectangle.world
 project4/__init__.py
 project4/disc_robot.py
 project4/simulator.py
