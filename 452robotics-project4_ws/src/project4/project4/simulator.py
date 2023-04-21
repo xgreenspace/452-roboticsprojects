@@ -8,7 +8,6 @@ from geometry_msgs.msg import TransformStamped, PoseStamped, Pose, Quaternion, P
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
 from nav_msgs.msg import OccupancyGrid
-from tf2_geometry_msgs import do_transform_pose
 from std_msgs.msg import String, Float64
 from sensor_msgs.msg import LaserScan, PointCloud
 import math
@@ -494,15 +493,6 @@ class MainSimulator(Node):
                                         )
                                     )
         
-        # self.Frame_publisher = self.create(?, 'FrameData', 10)
-
-        # worldfile = "brick.world"
-        # robotfile = "normal.robot"
-        
-        
-        # robotfile = os.path.join(get_package_share_directory('project4'), robotfile)
-        # worldfile = os.path.join(get_package_share_directory('project4'), worldfile)
-        
         self.robotYaml = dataYaml[0]
         self.worldYaml = dataYaml[1]
     
@@ -566,11 +556,6 @@ class MainSimulator(Node):
 
 
         self.br.sendTransform(t)
-
-        
-    # def collision_detection(self, msg):
-    #     if msg.x < self.min_x or msg.x > self.max_x or msg.y < self.min_y or msg.y > self.max_y:
-    #         self.stop_turtle()
 
 
 
