@@ -222,25 +222,25 @@ class DifferentialDriveSimulator(Node):
                 if is_point_occupied(i-1, j-1):
                     cornery = self.resolution*i
                     cornerx = self.resolution*j
-                    if np.linalg.norm(np.array([cornerx, cornery]) - np.array(robotx, roboty)) < self.radius:
+                    if np.sqrt((cornerx - robotx) ** 2 + (cornery - roboty) ** 2) < self.radius:
                         return True
                 #  top left square
                 if is_point_occupied(i+1, j-1):
                     cornery = self.resolution*(i+1)
                     cornerx = self.resolution*j
-                    if np.linalg.norm(np.array([cornerx, cornery]) - np.array(robotx, roboty)) < self.radius:
+                    if np.sqrt((cornerx - robotx) ** 2 + (cornery - roboty) ** 2) < self.radius:
                         return True
                 # bottom right square
                 if is_point_occupied(i-1, j+1):
                     cornery = self.resolution*i
                     cornerx = self.resolution*(j+1)
-                    if np.linalg.norm(np.array([cornerx, cornery]) - np.array(robotx, roboty)) < self.radius:
+                    if np.sqrt((cornerx - robotx) ** 2 + (cornery - roboty) ** 2) < self.radius:
                         return True
                 # top right square
                 if is_point_occupied(i+1, j+1):
                     cornery = self.resolution*(i+1)
                     cornerx = self.resolution*(j+1)
-                    if np.linalg.norm(np.array([cornerx, cornery]) - np.array(robotx, roboty)) < self.radius:
+                    if np.sqrt((cornerx - robotx) ** 2 + (cornery - roboty) ** 2) < self.radius:
                         return True
                     
                 

@@ -1,0 +1,7 @@
+/usr/lib/python3/dist-packages/setuptools/command/install.py:34: SetuptoolsDeprecationWarning: setup.py install is deprecated. Use build and pip and other standards-based tools.
+  warnings.warn(
+  File "/home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project4_ws/install/project4/lib/python3.10/site-packages/project4/simulator.py", line 233
+    bottom right square
+           ^^^^^
+SyntaxError: invalid syntax
+
