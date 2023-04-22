@@ -45,7 +45,7 @@ class DifferentialDriveSimulator(Node):
         self.timer = time.time()  # time.time_ns() is in nanoseconds. I will convert to seconds everytime I call it
         self.prevUpdateState = None  # measures time passed since robot's state was updated. Diff from self.timer b/c self.timer is for checking if 1-sec has passed since last vel msg to stop the robot like turtlesim. prevUpdateState just measures the time passed since last called used for calculation delta_t. We measure b/c want more precision and timer might trigger late so precision lost
 
-        self.timer_rate = 0.01
+        self.timer_rate = 0.001
 
         self.vl = 0
         self.vr = 0
@@ -87,33 +87,25 @@ class DifferentialDriveSimulator(Node):
         self.world_map.reverse()  # row major order starting with (0, 0) at the top
         
         self.create_timer(self.error_update_rate, self.UpdateError)
-        
-        
-        self.firstl = True
-        self.firstr = True
+          
+        self.errorL = 1
+        self.errorR = 1
 
 
     def UpdateError(self):
-        self.vl = self.true_vl * np.random.normal(1, np.sqrt(self.error_variance_left))
-        self.vr = self.true_vr * np.random.normal(1, np.sqrt(self.error_variance_right))
+        self.errorL = np.random.normal(1, np.sqrt(self.error_variance_left))
+        self.errorR = np.random.normal(1, np.sqrt(self.error_variance_right))
     
-
     def vl_listener(self, msg):
-        self.true_vl = msg.data
+        self.vl = msg.data * self.errorL
         self.timer = time.time()
-        
-        if self.firstl:
-            self.vl = self.true_vl
-            self.firstl = False
     
 
     def vr_listener(self, msg):
-        self.true_vr = msg.data
+        self.vr = msg.data * self.errorR
         self.timer = time.time()
         
-        if self.firstr:
-            self.vr = self.true_vr
-            self.firstr = False
+
      
 
     def UpdateState(self):
@@ -141,24 +133,28 @@ class DifferentialDriveSimulator(Node):
             state = self.my_state # np.array([x, y, theta])
             # dt = getSecs() - self.prevUpdateState  # measures time duraction since last callback, should be around ~ self.timer_rate = 0.1
             dt = self.timer_rate
-            try:
+            if self.vr - self.vl != 0:
+                #R = (self.length / 2.0) * (self.vr + self.vl) / (self.vr - self.vl)
+
+                #omegalol = (self.vr - self.vl) / self.length
+
                 R = (self.length / 2.0) * (self.vr + self.vl) / (self.vr - self.vl)
-
                 omegalol = (self.vr - self.vl) / self.length
-
+                
                 icc = np.array([x - R * np.sin(theta), y + R * np.cos(theta), 0.0])
             
                 dTheta = omegalol*dt
+            
 
                 matrix = np.array([[np.cos(dTheta), -np.sin(dTheta), 0.0],
-                            [np.sin(dTheta), np.cos(dTheta), 0.0],
-                            [0.0, 0.0, 1.0]
+                                  [np.sin(dTheta), np.cos(dTheta), 0.0],
+                                  [0.0, 0.0, 1.0]
                 ])
                 x_vec = state - icc
                 base_vec = icc + np.array([0.0, 0.0, dTheta])
                 new_state = matrix @ x_vec + base_vec  # [x, y, theta]
                 
-            except: # drive in straight line
+            else: # drive in straight line
                 distance = self.vr * dt
                 x += distance * np.cos(theta)
                 y += distance * np.sin(theta)
@@ -256,6 +252,8 @@ class DifferentialDriveSimulator(Node):
                 # self.my_state[2] = new_state[2]
             else:
                 self.my_state = new_state 
+            
+            
 
             
             position_state = Twist()
@@ -566,7 +564,7 @@ def main(args=None):
     # Read Files
     
     worldfile = "ell.world"
-    robotfile = "bad.robot"
+    robotfile = "ideal.robot"
     
     robotfile = os.path.join(get_package_share_directory('project4'), robotfile)
     worldfile = os.path.join(get_package_share_directory('project4'), worldfile)

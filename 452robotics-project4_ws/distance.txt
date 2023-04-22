@@ -1,3 +1,0 @@
-Top Right Robotx: 2.3099999999999934, Roboty: 2.0Top Right Cornerx: 2.5, Cornery: 2.25 
-distance from robot center to corner: 0.19924858845171706 
-Calculated Distance: 0.31400636936215565
