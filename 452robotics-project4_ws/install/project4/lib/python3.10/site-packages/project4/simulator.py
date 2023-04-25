@@ -23,11 +23,162 @@ import numpy as np
 import os
 from ament_index_python.packages import get_package_share_directory
 import time
+import heapq
 
 
 
 # def getSecs():
 #     return time.time()
+
+class VelocityTranslator(Node):
+    def __init__(self, dataYaml):
+        super().__init__('VelocityTranslator')
+
+        self.subscription = self.create_subscription(
+            Twist,
+            '/cmd_vel',
+            self.cmd_listener,
+            10
+        )
+
+        self.publisher_vr = self.create_publisher(Float64, '/vr', 10)
+        self.publisher_vl = self.create_publisher(Float64, '/vl', 10)
+        
+        self.robotYaml = dataYaml[0]
+        self.length = self.robotYaml['wheels']['distance']
+
+    
+    
+    def cmd_listener(self, msg: Twist):
+        
+        linear_velocity = msg.linear.x
+        anglular_velocity = msg.angular.z
+        
+        vr_msg = Float64()
+        vl_msg = Float64()
+              
+        vr_msg.data = linear_velocity + (anglular_velocity * self.length) / 2
+        vl_msg.data = linear_velocity - (anglular_velocity * self.length) / 2
+        
+        
+        self.publisher_vl.publish(vr_msg)
+        self.publisher_vr.publish(vl_msg)
+        
+        
+#for testing the Velocity Translator        
+class Turtle(Node):
+
+    def __init__(self):
+        super().__init__('turtle')
+        # The Level 1 artist draws circles
+        self.publisher_ = self.create_publisher(Twist, '/cmd_vel', 10)
+        timer_period = 1  # seconds. Interval between each publishment
+        self.timer = self.create_timer(timer_period, self.timer_callback)
+
+    def timer_callback(self):
+        msg = Twist()
+        # move forward a bit
+        msg.linear.x = 1.0
+        msg.linear.y = 0.0
+        msg.linear.z = 0.0
+        # turn left a little
+        msg.angular.x = 0.0
+        msg.angular.y = 0.0
+        msg.angular.z = 0.0
+
+        self.publisher_.publish(msg)  # goooo!
+
+    
+class NavigationController(Node):
+    def __init__(self, dataYaml):
+        super().__init__('Navigation')
+        
+        self.subscription = self.create_subscription(
+            LaserScan,
+            '/scan',
+            self.laser_listener,
+            10 
+        )
+        
+        self.publisher = self.create_publisher(Twist, '/cmd_vel', 10)
+        
+        
+        self.robotYaml = dataYaml[0]
+        self.range_min = self.robotYaml['laser']['range_min']
+        self.range_max = self.robotYaml['laser']['range_max']
+        
+    def laser_listener(self, msg: LaserScan):
+
+        # Find the index of the longest range
+        # max_range_idx = msg.ranges.index(max(msg.ranges))
+        
+        # ranges = np.array(msg.ranges)
+        # angles = np.linspace(msg.angle_min, msg.angle_max, len(ranges))  
+        
+        # # get largest 10
+        #polar_data = np.column_stack((ranges, angles)) 
+        
+        # sorted_items = sorted(polar_data, key=lambda x: x[0], reverse=True)[:10]
+        # angles = [a for _, a in sorted_items]
+        # angular_z = np.average(angles)
+
+        # # Compute desired angular velocity based on maximum range index
+        # # steering_gain = 0.1
+        # # angular_z = steering_gain * (len(msg.ranges) // 2 - max_range_idx)
+
+        # # Compute desired linear velocity based on maximum range
+        # linear_x = 0.5  # Set a fixed forward linear velocity
+
+        # # Create Twist message
+        # twist_msg = Twist()
+        # twist_msg.linear.x = linear_x
+        # twist_msg.angular.z = angular_z
+
+        # # Publish Twist message
+        # self.publisher.publish(twist_msg)
+        
+        ranges = np.array(msg.ranges)
+        angles = np.linspace(msg.angle_min, msg.angle_max, len(ranges))  
+        
+                
+        polar_data = np.column_stack((ranges, angles)) 
+
+
+
+        avg = np.average([r for r in ranges if not np.isnan(r) and not np.isinf(r)])   
+        
+        vector_to_move_in = np.array([0.0, 0.0])
+        
+        threshold = 10
+        for range, angle in polar_data:
+            if not np.isnan(range) and not np.isinf(range):
+                
+                # if range < avg:
+                #     vector_in_opposite_direction = -np.array([np.cos(angle), np.sin(angle)]) * ((range) ** (-1)) #/ self.range_max
+                # else:
+                vector_in_opposite_direction = np.array([np.cos(angle), np.sin(angle)]) * ((range) ** (-1)) #/ self.range_max
+                vector_to_move_in += vector_in_opposite_direction
+
+                ##vector_to_move_in += vector_in_opposite_direction
+                # vector = np.array([np.cos(angle), np.sin(angle)]) / range
+                # vector_to_move_in += vector
+                
+                # if range < threshold:
+                #     vector = -np.array([np.cos(angle), np.sin(angle)]) * range #/ self.range_max
+                # else:
+                #     vector = np.array([np.cos(angle), np.sin(angle)]) * range
+                # vector_to_move_in += vector
+        
+        vector_to_move_in = vector_to_move_in / len(ranges) 
+            
+        
+            
+        msg = Twist()
+        msg.linear.x = (avg)/ 4                                                                                                                                                                                                                                                                                                                                                 #np.linalg.norm(vector_to_move_in) / 100  # calculates the magnitude
+        msg.angular.z = float(np.arctan(vector_to_move_in[1] / vector_to_move_in[0])) * (avg )  # vector_to_move_in[1], vector_to_move_in[0]
+        
+        self.publisher.publish(msg)
+
 
 class DifferentialDriveSimulator(Node):
     
@@ -556,6 +707,7 @@ class MainSimulator(Node):
         self.br.sendTransform(t)
 
 
+    
 
         
 def main(args=None):
@@ -563,8 +715,8 @@ def main(args=None):
     
     # Read Files
     
-    worldfile = "ell.world"
-    robotfile = "ideal.robot"
+    worldfile = "cave.world"
+    robotfile = "normal.robot"
     
     robotfile = os.path.join(get_package_share_directory('project4'), robotfile)
     worldfile = os.path.join(get_package_share_directory('project4'), worldfile)
@@ -580,6 +732,11 @@ def main(args=None):
     n2 = LidarSimulator(dataYaml)
     # n3 = VelocitySimulator()  #! Gotta remove this one when we turn in
     n4 = MainSimulator(dataYaml)
+    
+    
+    # turtle = Turtle()
+    vel_Trans = VelocityTranslator(dataYaml)
+    nav = NavigationController(dataYaml)
 
     
     executor = SingleThreadedExecutor()
@@ -587,6 +744,10 @@ def main(args=None):
     executor.add_node(n2)
     # executor.add_node(n3)
     executor.add_node(n4)
+    
+    # executor.add_node(turtle)
+    executor.add_node(vel_Trans)
+    executor.add_node(nav)
 
     try:
         executor.spin()

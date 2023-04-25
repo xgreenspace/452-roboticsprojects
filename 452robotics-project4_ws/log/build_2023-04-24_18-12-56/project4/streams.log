@@ -1,0 +1,26 @@
+[0.566s] Invoking command in '/home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project4_ws/src/project4': PYTHONPATH=/home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project4_ws/build/project4/prefix_override:/home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project4_ws/install/project4/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 setup.py egg_info --egg-base ../../build/project4 build --build-base /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project4_ws/build/project4/build install --record /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project4_ws/build/project4/install.log --single-version-externally-managed
+[0.769s] running egg_info
+[0.769s] writing ../../build/project4/project4.egg-info/PKG-INFO
+[0.770s] writing dependency_links to ../../build/project4/project4.egg-info/dependency_links.txt
+[0.770s] writing entry points to ../../build/project4/project4.egg-info/entry_points.txt
+[0.770s] writing requirements to ../../build/project4/project4.egg-info/requires.txt
+[0.770s] writing top-level names to ../../build/project4/project4.egg-info/top_level.txt
+[0.771s] reading manifest file '../../build/project4/project4.egg-info/SOURCES.txt'
+[0.773s] writing manifest file '../../build/project4/project4.egg-info/SOURCES.txt'
+[0.773s] running build
+[0.773s] running build_py
+[0.773s] copying project4/simulator.py -> /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project4_ws/build/project4/build/lib/project4
+[0.773s] running install
+[0.774s] /usr/lib/python3/dist-packages/setuptools/command/install.py:34: SetuptoolsDeprecationWarning: setup.py install is deprecated. Use build and pip and other standards-based tools.
+[0.774s]   warnings.warn(
+[0.774s] running install_lib
+[0.774s] copying /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project4_ws/build/project4/build/lib/project4/simulator.py -> /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project4_ws/install/project4/lib/python3.10/site-packages/project4
+[0.775s] byte-compiling /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project4_ws/install/project4/lib/python3.10/site-packages/project4/simulator.py to simulator.cpython-310.pyc
+[0.777s] running install_data
+[0.778s] running install_egg_info
+[0.779s] removing '/home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project4_ws/install/project4/lib/python3.10/site-packages/project4-0.0.0-py3.10.egg-info' (and everything under it)
+[0.779s] Copying ../../build/project4/project4.egg-info to /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project4_ws/install/project4/lib/python3.10/site-packages/project4-0.0.0-py3.10.egg-info
+[0.780s] running install_scripts
+[0.795s] Installing simulator script to /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project4_ws/install/project4/lib/project4
+[0.795s] writing list of installed files to '/home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project4_ws/build/project4/install.log'
+[0.813s] Invoked command in '/home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project4_ws/src/project4' returned '0': PYTHONPATH=/home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project4_ws/build/project4/prefix_override:/home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project4_ws/install/project4/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 setup.py egg_info --egg-base ../../build/project4 build --build-base /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project4_ws/build/project4/build install --record /home/shuruixu/Desktop/CSCE452/452-roboticsprojects/452robotics-project4_ws/build/project4/install.log --single-version-externally-managed

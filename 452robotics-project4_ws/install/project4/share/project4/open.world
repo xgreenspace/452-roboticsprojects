@@ -1,6 +1,6 @@
 resolution: 0.25
 
-initial_pose: [2.0, 2.0, 3.14]
+initial_pose: [3.0, 0.7, 3.14]
 
 map: |
     ################
