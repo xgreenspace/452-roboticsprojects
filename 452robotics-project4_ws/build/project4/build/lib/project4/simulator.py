@@ -147,6 +147,9 @@ class NavigationController(Node):
 
         avg = np.average([r for r in ranges if not np.isnan(r) and not np.isinf(r)])   
         
+        avgcloset10points = np.mean(np.argsort([r for r in ranges if not np.isnan(r) and not np.isinf(r)])[:10])
+        
+        
         vector_to_move_in = np.array([0.0, 0.0])
         
         threshold = 10
@@ -174,8 +177,9 @@ class NavigationController(Node):
         
             
         msg = Twist()
-        msg.linear.x = (avg)/ 4                                                                                                                                                                                                                                                                                                                                                 #np.linalg.norm(vector_to_move_in) / 100  # calculates the magnitude
-        msg.angular.z = float(np.arctan(vector_to_move_in[1] / vector_to_move_in[0])) * (avg )  # vector_to_move_in[1], vector_to_move_in[0]
+        
+        msg.linear.x =   avg  / avgcloset10points                                                                                                                                                                                                                                                                                                                                         #np.linalg.norm(vector_to_move_in) / 100  # calculates the magnitude
+        msg.angular.z = np.arctan2(vector_to_move_in[1], vector_to_move_in[0]) * avgcloset10points/(5*avg) #* (3/avgcloset10points)  # vector_to_move_in[1], vector_to_move_in[0]
         
         self.publisher.publish(msg)
 
