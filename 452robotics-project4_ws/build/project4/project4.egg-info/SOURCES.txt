@@ -12,7 +12,7 @@ launch/bad.robot
 launch/brick.world
 launch/cave.world
 launch/custom1.world
-launch/customcave.world
+launch/donut.world
 launch/ell.world
 launch/ideal.robot
 launch/launch.py
@@ -20,6 +20,7 @@ launch/normal.robot
 launch/open.world
 launch/pillars.world
 launch/rectangle.world
+launch/snake.world
 launch/windy.world
 project4/__init__.py
 project4/disc_robot.py

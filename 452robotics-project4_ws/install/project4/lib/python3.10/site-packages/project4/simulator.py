@@ -178,8 +178,8 @@ class NavigationController(Node):
             
         msg = Twist()
         
-        msg.linear.x =   avg  / avgcloset10points                                                                                                                                                                                                                                                                                                                                         #np.linalg.norm(vector_to_move_in) / 100  # calculates the magnitude
-        msg.angular.z = np.arctan2(vector_to_move_in[1], vector_to_move_in[0]) * avgcloset10points/(5*avg) #* (3/avgcloset10points)  # vector_to_move_in[1], vector_to_move_in[0]
+        msg.linear.x =  1.1 * avg  / avgcloset10points                                                                                                                                                                                                                                                                                                                                         #np.linalg.norm(vector_to_move_in) / 100  # calculates the magnitude
+        msg.angular.z = np.arctan2(vector_to_move_in[1], vector_to_move_in[0]) * avgcloset10points/(5*avg)#* avgcloset10points/(5*avg)  # vector_to_move_in[1], vector_to_move_in[0]
         
         self.publisher.publish(msg)
 
@@ -719,7 +719,7 @@ def main(args=None):
     
     # Read Files
     
-    worldfile = "cave.world"
+    worldfile = "snake.world"
     robotfile = "normal.robot"
     
     robotfile = os.path.join(get_package_share_directory('project4'), robotfile)
